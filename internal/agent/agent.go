@@ -6,7 +6,7 @@ import (
 	"runtime"
 )
 
-func GetMetric() MemoryMetrics {
+func getMetric() MemoryMetrics {
 	var m runtime.MemStats
 	runtime.ReadMemStats(&m)
 
@@ -41,7 +41,7 @@ func GetMetric() MemoryMetrics {
 	}
 }
 
-func MetricsToMap(metrics MemoryMetrics) map[string]float64 {
+func metricsToMap(metrics MemoryMetrics) map[string]float64 {
 	result := make(map[string]float64)
 
 	v := reflect.ValueOf(metrics)
@@ -56,10 +56,16 @@ func MetricsToMap(metrics MemoryMetrics) map[string]float64 {
 	return result
 }
 
-func SendMetrics(metricsMap map[string]float64) {
+func SendMetrics(client *Client) ([]byte, error) {
+
+	metrics := getMetric()
+	metricsMap := metricsToMap(metrics)
+
 	for name, value := range metricsMap {
-		fmt.Printf("Sending %s: %f\n", name, value)
-		// sendToServer(name, value)
+		_, err := client.Post(fmt.Sprintf("/gauge/%s/%f", name, value), nil)
+		if err != nil {
+			return nil, err
+		}
 	}
-	fmt.Println()
+	return nil, nil
 }

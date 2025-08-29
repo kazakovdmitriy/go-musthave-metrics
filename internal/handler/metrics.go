@@ -1,7 +1,6 @@
 package handler
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -31,7 +30,6 @@ func (h *MetricsHandler) Update(w http.ResponseWriter, r *http.Request) {
 
 	if len(pathParts) < 4 {
 		w.WriteHeader(http.StatusNotFound)
-
 		return
 	}
 
@@ -62,7 +60,8 @@ func (h *MetricsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	fmt.Println(r.URL.Fragment)
+	// Для дебага
+	// fmt.Println(r.URL.Path)
 
 	w.WriteHeader(http.StatusOK)
 }
