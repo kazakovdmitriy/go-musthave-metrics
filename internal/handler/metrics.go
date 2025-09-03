@@ -26,6 +26,9 @@ func (h *MetricsHandler) Update(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Дебаг
+	// fmt.Println("data received from endpoint: ", r.URL.Path)
+
 	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
 
 	if len(pathParts) < 4 {
