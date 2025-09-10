@@ -3,6 +3,7 @@ package main
 import (
 	"net/http"
 
+	"github.com/go-chi/chi"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
@@ -24,9 +25,14 @@ func setupHandler() http.Handler {
 	metricsServer := service.NewMetricService(memStorage)
 	metricsHandler := handler.NewMetricsHandler(metricsServer)
 
-	mux := http.NewServeMux()
+	r := chi.NewRouter()
 
-	mux.HandleFunc("/update/", metricsHandler.Update)
+	r.Route("/update", func(r chi.Router) {
+		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
+			r.Get("/", metricsHandler.GetMetric)
+			r.Post("/{value}", metricsHandler.UpdateMetric)
+		})
+	})
 
-	return mux
+	return r
 }

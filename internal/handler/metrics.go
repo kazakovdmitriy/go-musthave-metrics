@@ -3,8 +3,8 @@ package handler
 import (
 	"net/http"
 	"strconv"
-	"strings"
 
+	"github.com/go-chi/chi"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
@@ -19,26 +19,49 @@ func NewMetricsHandler(service service.MetricsServer) *MetricsHandler {
 	}
 }
 
-func (h *MetricsHandler) Update(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
-		w.WriteHeader(http.StatusMethodNotAllowed)
+func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
+	metricType := chi.URLParam(r, "metricType")
+	metricName := chi.URLParam(r, "metricName")
 
+	var value interface{}
+	var err error
+
+	switch metricType {
+	case model.Gauge:
+		value, err = h.service.GetGauge(metricName)
+	case model.Counter:
+		value, err = h.service.GetCounter(metricName)
+	default:
+		w.WriteHeader(http.StatusBadRequest)
+	}
+
+	if err != nil {
+		w.WriteHeader(http.StatusNotFound)
+	}
+
+	var strValue string
+	switch v := value.(type) {
+	case float64:
+		strValue = strconv.FormatFloat(v, 'f', -1, 64)
+	case int64:
+		strValue = strconv.FormatInt(v, 10)
+	default:
+		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
 
+	w.Header().Set("Content-Type", "text/plain")
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(strValue))
+}
+
+func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	// Дебаг
 	// fmt.Println("data received from endpoint: ", r.URL.Path)
 
-	pathParts := strings.Split(strings.Trim(r.URL.Path, "/"), "/")
-
-	if len(pathParts) < 4 {
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	metricType := pathParts[1]
-	metricName := pathParts[2]
-	metricValue := pathParts[3]
+	metricType := chi.URLParam(r, "metricType")
+	metricName := chi.URLParam(r, "metricName")
+	metricValue := chi.URLParam(r, "value")
 
 	switch metricType {
 	case model.Gauge:

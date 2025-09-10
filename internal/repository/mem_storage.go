@@ -52,3 +52,5 @@ func (m *memStorage) GetCounter(name string) (int64, bool) {
 	}
 	return 0, false
 }
+
+func (m *memStorage) GetAllMetrics()
