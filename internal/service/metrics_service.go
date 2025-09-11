@@ -1,6 +1,6 @@
 package service
 
-type MetricsServer interface {
+type MetricsService interface {
 	UpdateGauge(name string, value float64) error
 	UpdateCounter(name string, value int64) error
 	GetGauge(name string) (float64, error)

@@ -1,56 +1,66 @@
 package repository
 
 import (
-	models "github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
+	"fmt"
 )
 
 type memStorage struct {
-	data map[string]models.Metrics
+	counters map[string]int64
+	gauges   map[string]float64
 }
 
 func NewMemStorage() Storage {
 	return &memStorage{
-		data: make(map[string]models.Metrics),
+		counters: make(map[string]int64),
+		gauges:   make(map[string]float64),
 	}
 }
 
 func (m *memStorage) UpdateGauge(name string, value float64) {
-	m.data[name] = models.Metrics{
-		ID:    "id",
-		MType: models.Gauge,
-		Value: &value,
-	}
+	m.gauges[name] = value
 }
 
 func (m *memStorage) UpdateCounter(name string, value int64) {
-	if existing, exists := m.data[name]; exists && existing.MType == "counter" {
-		newDelta := *existing.Delta + value
-		m.data[name] = models.Metrics{
-			ID:    name,
-			MType: "counter",
-			Delta: &newDelta,
-		}
+	if existing, exists := m.counters[name]; exists {
+		newDelta := existing + value
+		m.counters[name] = newDelta
 	} else {
-		m.data[name] = models.Metrics{
-			ID:    name,
-			MType: "counter",
-			Delta: &value,
-		}
+		m.counters[name] = value
 	}
 }
 
 func (m *memStorage) GetGauge(name string) (float64, bool) {
-	if metric, exists := m.data[name]; exists && metric.MType == "gauge" {
-		return *metric.Value, true
+	if metric, exists := m.gauges[name]; exists {
+		return metric, true
 	}
 	return 0, false
 }
 
 func (m *memStorage) GetCounter(name string) (int64, bool) {
-	if metric, exists := m.data[name]; exists && metric.MType == "counter" {
-		return *metric.Delta, true
+	if metric, exists := m.counters[name]; exists {
+		return metric, true
 	}
 	return 0, false
 }
 
-func (m *memStorage) GetAllMetrics()
+func (m *memStorage) GetAllMetrics() (string, error) {
+	var result string
+
+	result += "<ul>\n"
+
+	for key, value := range m.counters {
+		result += fmt.Sprintf("<li>%s = %d</li>\n", key, value)
+	}
+
+	for key, value := range m.gauges {
+		result += fmt.Sprintf("<li>%s = %f</li>\n", key, value)
+	}
+
+	result += "</ul>\n"
+
+	if result != "<ul>\n</ul>\n" { // Проверяем, есть ли данные
+		return result, nil
+	}
+
+	return "", fmt.Errorf("no metrics found")
+}
