@@ -41,8 +41,13 @@ func newMetricsHandler(memStorage repository.Storage) *MetricsHandler {
 func setupMetricsRoutes(r chi.Router, metricsHandler *MetricsHandler) {
 	r.Route("/update", func(r chi.Router) {
 		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
-			r.Get("/", metricsHandler.GetMetric)
 			r.Post("/{value}", metricsHandler.UpdateMetric)
+		})
+	})
+
+	r.Route("/value", func(r chi.Router) {
+		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
+			r.Get("/", metricsHandler.GetMetric)
 		})
 	})
 }

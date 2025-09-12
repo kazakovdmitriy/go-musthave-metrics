@@ -4,10 +4,12 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
 )
 
 func TestSetupHandler(t *testing.T) {
-	handler := setupHandler()
+	handler := handler.SetupHandler()
 
 	if handler == nil {
 		t.Error("handler should not be nil")
@@ -16,7 +18,7 @@ func TestSetupHandler(t *testing.T) {
 
 func TestUpdateEndpoint(t *testing.T) {
 	// Создаем обработчик как в main
-	handler := setupHandler()
+	handler := handler.SetupHandler()
 
 	// Тестируем различные запросы
 	testCases := []struct {
