@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 )
 
@@ -16,10 +17,19 @@ type Client struct {
 }
 
 func NewClient(baseURL string) *Client {
+
+	if strings.HasPrefix(baseURL, ":") {
+		baseURL = "localhost" + baseURL
+	}
+
+	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
+		baseURL = "http://" + baseURL
+	}
+
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
-			Timeout: time.Second * 10,
+			Timeout: time.Second * 20,
 		},
 		headers: make(map[string]string),
 	}

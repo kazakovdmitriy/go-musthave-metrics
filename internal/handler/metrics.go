@@ -33,10 +33,12 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 		value, err = h.service.GetCounter(metricName)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 
 	var strValue string

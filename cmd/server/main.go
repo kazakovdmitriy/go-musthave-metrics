@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
 )
 
@@ -13,6 +15,11 @@ func main() {
 }
 
 func run() error {
+
+	cfg := config.ParseFlagsServer()
+
 	handler := handler.SetupHandler()
-	return http.ListenAndServe(":8080", handler)
+
+	fmt.Println("Run server on: ", cfg.ServerAddr)
+	return http.ListenAndServe(cfg.ServerAddr, handler)
 }
