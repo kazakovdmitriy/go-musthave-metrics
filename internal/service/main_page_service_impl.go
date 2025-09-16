@@ -10,7 +10,7 @@ type mainPageService struct {
 	storage repository.Storage
 }
 
-func NewMainPageService(storage repository.Storage) MainPageService {
+func NewMainPageService(storage repository.Storage) *mainPageService {
 	return &mainPageService{
 		storage: storage,
 	}
