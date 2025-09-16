@@ -9,18 +9,16 @@ import (
 )
 
 func main() {
-
 	cfg := config.ParseFlagsAgent()
 	client := agent.NewClient(cfg.ServerAddr)
 
-	poolingInterval := time.Duration(cfg.PollingInterval) * time.Second
+	polingInterval := time.Duration(cfg.PollingInterval) * time.Second
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
 
 	metrics := agent.GetMetrics()
 	lastReportTime := time.Now()
 
 	for {
-
 		currentTime := time.Now()
 
 		if currentTime.Sub(lastReportTime) >= reportInterval {
@@ -31,6 +29,6 @@ func main() {
 		}
 
 		metrics = agent.GetMetrics()
-		time.Sleep(poolingInterval)
+		time.Sleep(polingInterval)
 	}
 }

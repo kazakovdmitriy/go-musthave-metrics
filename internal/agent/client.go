@@ -78,6 +78,6 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	return respBody, nil
 }
 
-func (c *Client) Post(endpont string, body interface{}) ([]byte, error) {
-	return c.doRequest(http.MethodPost, endpont, body)
+func (c *Client) Post(endpoint string, body interface{}) ([]byte, error) {
+	return c.doRequest(http.MethodPost, endpoint, body)
 }
