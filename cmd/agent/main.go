@@ -1,7 +1,12 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
+	"sync"
+	"syscall"
 	"time"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
@@ -15,20 +20,70 @@ func main() {
 	polingInterval := time.Duration(cfg.PollingInterval) * time.Second
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
 
-	metrics := agent.GetMetrics()
-	lastReportTime := time.Now()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
 
-	for {
-		currentTime := time.Now()
+	sigChan := make(chan os.Signal, 1)
+	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
 
-		if currentTime.Sub(lastReportTime) >= reportInterval {
-			_, err := agent.SendMetrics(client, metrics)
-			if err != nil {
-				fmt.Println("error from server: ", err)
+	var metricsMutex sync.RWMutex
+	metrics, err := agent.GetMetrics(ctx)
+	if err != nil {
+		return
+	}
+
+	pollTicker := time.NewTicker(polingInterval)
+	defer pollTicker.Stop()
+
+	go func() {
+		for {
+			select {
+			case <-pollTicker.C:
+				newMetrics, err := agent.GetMetrics(ctx)
+				if err != nil {
+					return
+				}
+				metricsMutex.Lock()
+				metrics = newMetrics
+				metricsMutex.Unlock()
+			case <-ctx.Done():
+				return
 			}
 		}
+	}()
 
-		metrics = agent.GetMetrics()
-		time.Sleep(polingInterval)
-	}
+	reportTicker := time.NewTicker(reportInterval)
+	defer reportTicker.Stop()
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-reportTicker.C:
+				metricsMutex.RLock()
+				currentMetrics := metrics
+				metricsMutex.RUnlock()
+
+				_, err := agent.SendMetrics(client, currentMetrics)
+				if err != nil {
+					fmt.Println("error from server: ", err)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
+
+	<-sigChan
+	fmt.Println("\nReceived interrupt signal. Shutting down gracefully...")
+
+	cancel()
+	pollTicker.Stop()
+	reportTicker.Stop()
+
+	wg.Wait()
+	fmt.Println("agent shutdown completed")
 }
