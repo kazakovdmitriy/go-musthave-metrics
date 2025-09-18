@@ -4,8 +4,6 @@ import (
 	"net/http"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 func main() {
@@ -15,18 +13,6 @@ func main() {
 }
 
 func run() error {
-	handler := setupHandler()
+	handler := handler.SetupHandler()
 	return http.ListenAndServe(":8080", handler)
-}
-
-func setupHandler() http.Handler {
-	memStorage := repository.NewMemStorage()
-	metricsServer := service.NewMetricService(memStorage)
-	metricsHandler := handler.NewMetricsHandler(metricsServer)
-
-	mux := http.NewServeMux()
-
-	mux.HandleFunc("/update/", metricsHandler.Update)
-
-	return mux
 }

@@ -10,7 +10,7 @@ type metricsService struct {
 	storage repository.Storage
 }
 
-func NewMetricService(storage repository.Storage) MetricsServer {
+func NewMetricService(storage repository.Storage) MetricsService {
 	return &metricsService{
 		storage: storage,
 	}
