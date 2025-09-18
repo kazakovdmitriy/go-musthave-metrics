@@ -2,15 +2,13 @@ package handler
 
 import (
 	"net/http"
-
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 type MainPageHandler struct {
-	service service.MainPageService
+	service MainPageService
 }
 
-func NewMainPageHandler(service service.MainPageService) *MainPageHandler {
+func NewMainPageHandler(service MainPageService) *MainPageHandler {
 	return &MainPageHandler{
 		service: service,
 	}

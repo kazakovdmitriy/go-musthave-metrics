@@ -30,3 +30,36 @@ type MemoryMetrics struct {
 	TotalAlloc    float64 `json:"total_alloc"`
 	RandomValue   float64 `json:"random_value,omitempty"`
 }
+
+func (m MemoryMetrics) ToMap() map[string]float64 {
+	return map[string]float64{
+		"Alloc":         m.Alloc,
+		"BuckHashSys":   m.BuckHashSys,
+		"Frees":         m.Frees,
+		"GCCPUFraction": m.GCCPUFraction,
+		"GCSys":         m.GCSys,
+		"HeapAlloc":     m.HeapAlloc,
+		"HeapIdle":      m.HeapIdle,
+		"HeapInuse":     m.HeapInuse,
+		"HeapObjects":   m.HeapObjects,
+		"HeapReleased":  m.HeapReleased,
+		"HeapSys":       m.HeapSys,
+		"LastGC":        m.LastGC,
+		"Lookups":       m.Lookups,
+		"MCacheInuse":   m.MCacheInuse,
+		"MCacheSys":     m.MCacheSys,
+		"MSpanInuse":    m.MSpanInuse,
+		"MSpanSys":      m.MSpanSys,
+		"Mallocs":       m.Mallocs,
+		"NextGC":        m.NextGC,
+		"NumForcedGC":   m.NumForcedGC,
+		"NumGC":         m.NumGC,
+		"OtherSys":      m.OtherSys,
+		"PauseTotalNs":  m.PauseTotalNs,
+		"StackInuse":    m.StackInuse,
+		"StackSys":      m.StackSys,
+		"Sys":           m.Sys,
+		"TotalAlloc":    m.TotalAlloc,
+		"RandomValue":   m.RandomValue,
+	}
+}

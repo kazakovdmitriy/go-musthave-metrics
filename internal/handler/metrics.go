@@ -6,14 +6,13 @@ import (
 
 	"github.com/go-chi/chi"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 type MetricsHandler struct {
-	service service.MetricsService
+	service MetricsService
 }
 
-func NewMetricsHandler(service service.MetricsService) *MetricsHandler {
+func NewMetricsHandler(service MetricsService) *MetricsHandler {
 	return &MetricsHandler{
 		service: service,
 	}
@@ -33,10 +32,12 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 		value, err = h.service.GetCounter(metricName)
 	default:
 		w.WriteHeader(http.StatusBadRequest)
+		return
 	}
 
 	if err != nil {
 		w.WriteHeader(http.StatusNotFound)
+		return
 	}
 
 	var strValue string
