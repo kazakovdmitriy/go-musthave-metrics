@@ -25,3 +25,4 @@ vendor/
 .vscode
 
 metricstest
+run_test.zsh

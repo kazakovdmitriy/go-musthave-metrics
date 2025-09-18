@@ -15,14 +15,18 @@ func main() {
 }
 
 func run() error {
+	handler := setupHandler()
+	return http.ListenAndServe(":8080", handler)
+}
 
+func setupHandler() http.Handler {
 	memStorage := repository.NewMemStorage()
-	metricsService := service.NewMetricService(memStorage)
-	metricsHandler := handler.NewMetricsHandler(metricsService)
+	metricsServer := service.NewMetricService(memStorage)
+	metricsHandler := handler.NewMetricsHandler(metricsServer)
 
 	mux := http.NewServeMux()
 
 	mux.HandleFunc("/update/", metricsHandler.Update)
 
-	return http.ListenAndServe(`:8080`, mux)
+	return mux
 }
