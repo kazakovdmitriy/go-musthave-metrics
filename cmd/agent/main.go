@@ -14,7 +14,10 @@ import (
 )
 
 func main() {
-	cfg := config.ParseFlagsAgent()
+	cfg := config.ParseAgentConfig()
+
+	fmt.Println(cfg)
+
 	client := agent.NewClient(cfg.ServerAddr)
 
 	polingInterval := time.Duration(cfg.PollingInterval) * time.Second
