@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"math/rand/v2"
 	"runtime"
 )
 
@@ -42,6 +43,7 @@ func GetMetrics(ctx context.Context) (MemoryMetrics, error) {
 			StackSys:      float64(m.StackSys),
 			Sys:           float64(m.Sys),
 			TotalAlloc:    float64(m.TotalAlloc),
+			RandomValue:   rand.Float64(),
 		}, nil
 	}
 

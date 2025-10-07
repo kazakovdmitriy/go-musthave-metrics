@@ -6,7 +6,7 @@ import (
 	"go.uber.org/zap"
 )
 
-func SendMetrics(client *Client, metrics MemoryMetrics) ([]byte, error) {
+func SendMetrics(client *Client, metrics MemoryMetrics, deltaCounter int64) ([]byte, error) {
 
 	metricsMap := metrics.ToMap()
 
@@ -25,6 +25,21 @@ func SendMetrics(client *Client, metrics MemoryMetrics) ([]byte, error) {
 			)
 			return nil, err
 		}
+	}
+
+	counterBody := model.Metrics{
+		ID:    "PollCount",
+		MType: "counter",
+		Delta: &deltaCounter,
+	}
+	_, err := client.Post("/update", counterBody)
+	if err != nil {
+		logger.Log.Error(
+			"failed to send counter",
+			zap.String("metric", counterBody.ID),
+			zap.Int64("value", deltaCounter),
+		)
+		return nil, err
 	}
 	return nil, nil
 }

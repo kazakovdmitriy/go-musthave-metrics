@@ -41,6 +41,8 @@ func main() {
 	pollTicker := time.NewTicker(polingInterval)
 	defer pollTicker.Stop()
 
+	poolCount := 0
+
 	go func() {
 		for {
 			select {
@@ -51,6 +53,7 @@ func main() {
 				}
 				metricsMutex.Lock()
 				metrics = newMetrics
+				poolCount += 1
 				metricsMutex.Unlock()
 			case <-ctx.Done():
 				return
@@ -71,9 +74,11 @@ func main() {
 			case <-reportTicker.C:
 				metricsMutex.RLock()
 				currentMetrics := metrics
+				deltaCount := poolCount
+				poolCount = 0
 				metricsMutex.RUnlock()
 
-				_, err := agent.SendMetrics(client, currentMetrics)
+				_, err := agent.SendMetrics(client, currentMetrics, int64(deltaCount))
 				if err != nil {
 					logger.Log.Error("error from server", zap.Error(err))
 				}
