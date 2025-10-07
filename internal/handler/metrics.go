@@ -118,7 +118,7 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 		var resp model.Metrics
 
 		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			http.Error(w, "Invalid JSON", http.StatusNotFound)
 			return
 		}
 
@@ -126,7 +126,7 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 		case model.Gauge:
 			value, err := h.service.GetGauge(data.ID)
 			if err != nil {
-				http.Error(w, "Invalid metric value", http.StatusBadRequest)
+				http.Error(w, "Invalid metric value", http.StatusNotFound)
 			}
 
 			resp = model.Metrics{
@@ -137,7 +137,7 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 		case strings.ToLower(model.Counter):
 			value, err := h.service.GetCounter(data.ID)
 			if err != nil {
-				http.Error(w, "Invalid metric value", http.StatusBadRequest)
+				http.Error(w, "Invalid metric value", http.StatusNotFound)
 			}
 			myValue := float64(value)
 			resp = model.Metrics{
@@ -147,14 +147,14 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 			}
 		}
 
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
 		enc := json.NewEncoder(w)
 		if err := enc.Encode(resp); err != nil {
 			logger.Log.Error("error encoding response", zap.Error(err))
 			return
 		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
 	}
 }
 
