@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -11,12 +10,16 @@ import (
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg := config.ParseAgentConfig()
 
-	fmt.Println(cfg)
+	if err := logger.Initialise(cfg.LogLevel); err != nil {
+		panic(err)
+	}
 
 	client := agent.NewClient(cfg.ServerAddr)
 
@@ -72,7 +75,7 @@ func main() {
 
 				_, err := agent.SendMetrics(client, currentMetrics)
 				if err != nil {
-					fmt.Println("error from server: ", err)
+					logger.Log.Error("error from server", zap.Error(err))
 				}
 			case <-ctx.Done():
 				return
@@ -81,12 +84,12 @@ func main() {
 	}()
 
 	<-sigChan
-	fmt.Println("\nReceived interrupt signal. Shutting down gracefully...")
+	logger.Log.Info("received interrupt signal. shutting down gracefully...")
 
 	cancel()
 	pollTicker.Stop()
 	reportTicker.Stop()
 
 	wg.Wait()
-	fmt.Println("agent shutdown completed")
+	logger.Log.Info("agent shutdown completed")
 }
