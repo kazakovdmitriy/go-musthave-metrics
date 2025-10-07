@@ -87,9 +87,6 @@ func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Для дебага
-	// fmt.Println(r.URL.Path)
-
 	w.WriteHeader(http.StatusOK)
 }
 

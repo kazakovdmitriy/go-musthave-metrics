@@ -1,11 +1,12 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
@@ -15,11 +16,14 @@ func main() {
 }
 
 func run() error {
-
 	cfg := config.ParseServerConfig()
+
+	if err := logger.Initialise(cfg.LogLevel); err != nil {
+		return err
+	}
 
 	handler := handler.SetupHandler()
 
-	fmt.Println("Run server on: ", cfg.ServerAddr)
+	logger.Log.Info("Run server on: ", zap.String("address", cfg.ServerAddr))
 	return http.ListenAndServe(cfg.ServerAddr, handler)
 }

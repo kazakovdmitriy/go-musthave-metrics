@@ -4,12 +4,15 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 func SetupHandler() http.Handler {
 	r := chi.NewRouter()
+
+	setupMiddlewares(r)
 
 	memStorage := repository.NewMemStorage()
 
@@ -20,6 +23,11 @@ func SetupHandler() http.Handler {
 	setupMetricsRoutes(r, metricsHandler)
 
 	return r
+}
+
+func setupMiddlewares(r chi.Router) {
+	r.Use(logger.RequestLogger)
+	r.Use(logger.ResponseLogger)
 }
 
 func newMainPageService(memStorage repository.Storage) *MainPageHandler {
