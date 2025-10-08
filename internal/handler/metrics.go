@@ -100,9 +100,11 @@ func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 			h.service.UpdateCounter(metricName, *data.Delta)
 		default:
 			http.Error(w, "unknown metric type", http.StatusBadRequest)
+			return
 		}
 	default:
 		http.Error(w, "Unsupported content type", http.StatusUnsupportedMediaType)
+		return
 	}
 
 	w.WriteHeader(http.StatusOK)
@@ -127,6 +129,7 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 			value, err := h.service.GetGauge(data.ID)
 			if err != nil {
 				http.Error(w, "Invalid metric value", http.StatusNotFound)
+				return
 			}
 
 			resp = model.Metrics{
@@ -138,12 +141,12 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 			value, err := h.service.GetCounter(data.ID)
 			if err != nil {
 				http.Error(w, "Invalid metric value", http.StatusNotFound)
+				return
 			}
-			myValue := float64(value)
 			resp = model.Metrics{
 				ID:    data.ID,
 				MType: data.MType,
-				Value: &myValue,
+				Delta: &value,
 			}
 		}
 
@@ -181,10 +184,10 @@ func (h *MetricsHandler) processMetricUpdate(metricType, metricName, metricValue
 	return http.StatusOK, nil
 }
 
-func writeErrorBadRequests(w http.ResponseWriter, err error) bool {
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return true
-	}
-	return false
-}
+// func writeErrorBadRequests(w http.ResponseWriter, err error) bool {
+// 	if err != nil {
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return true
+// 	}
+// 	return false
+// }
