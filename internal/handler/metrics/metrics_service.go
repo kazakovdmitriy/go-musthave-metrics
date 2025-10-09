@@ -1,4 +1,4 @@
-package handler
+package metrics
 
 type MetricsService interface {
 	UpdateGauge(name string, value float64) error

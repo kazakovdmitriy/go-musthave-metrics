@@ -1,4 +1,4 @@
-package handler
+package mainpage
 
 import (
 	"net/http"

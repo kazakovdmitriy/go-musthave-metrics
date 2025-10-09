@@ -4,7 +4,9 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/mainpage"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/metrics"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
@@ -12,7 +14,9 @@ import (
 func SetupHandler() http.Handler {
 	r := chi.NewRouter()
 
-	setupMiddlewares(r)
+	compressorService := service.NewGzipCompressor()
+
+	setupMiddlewares(r, compressorService)
 
 	memStorage := repository.NewMemStorage()
 
@@ -25,28 +29,29 @@ func SetupHandler() http.Handler {
 	return r
 }
 
-func setupMiddlewares(r chi.Router) {
-	r.Use(logger.RequestLogger)
-	r.Use(logger.ResponseLogger)
+func setupMiddlewares(r chi.Router, compressorService middlewares.Compressor) {
+	r.Use(middlewares.RequestLogger)
+	r.Use(middlewares.ResponseLogger)
+	r.Use(middlewares.Compress(compressorService))
 }
 
-func newMainPageService(memStorage repository.Storage) *MainPageHandler {
+func newMainPageService(memStorage repository.Storage) *mainpage.MainPageHandler {
 	mainPageService := service.NewMainPageService(memStorage)
-	return NewMainPageHandler(mainPageService)
+	return mainpage.NewMainPageHandler(mainPageService)
 }
 
-func setupMainRoutes(r chi.Router, mainPageHandler *MainPageHandler) {
+func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {
 	r.Route("/", func(r chi.Router) {
 		r.Get("/", mainPageHandler.GetMainPage)
 	})
 }
 
-func newMetricsHandler(memStorage repository.Storage) *MetricsHandler {
+func newMetricsHandler(memStorage repository.Storage) *metrics.MetricsHandler {
 	metricsServer := service.NewMetricService(memStorage)
-	return NewMetricsHandler(metricsServer)
+	return metrics.NewMetricsHandler(metricsServer)
 }
 
-func setupMetricsRoutes(r chi.Router, metricsHandler *MetricsHandler) {
+func setupMetricsRoutes(r chi.Router, metricsHandler *metrics.MetricsHandler) {
 	r.Route("/update", func(r chi.Router) {
 		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
 			r.Post("/{value}", metricsHandler.UpdateMetric)
