@@ -6,7 +6,7 @@ import (
 
 var Log *zap.Logger = zap.NewNop()
 
-func Initialise(level string) error {
+func Initialize(level string) error {
 	lvl, err := zap.ParseAtomicLevel(level)
 	if err != nil {
 		return err

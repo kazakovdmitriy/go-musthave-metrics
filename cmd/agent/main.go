@@ -17,7 +17,7 @@ import (
 func main() {
 	cfg := config.ParseAgentConfig()
 
-	if err := logger.Initialise(cfg.LogLevel); err != nil {
+	if err := logger.Initialize(cfg.LogLevel); err != nil {
 		panic(err)
 	}
 

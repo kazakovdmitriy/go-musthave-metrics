@@ -2,6 +2,7 @@ package handler
 
 import (
 	"net/http"
+	"sync"
 
 	"github.com/go-chi/chi"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/mainpage"
@@ -11,14 +12,21 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
-func SetupHandler() http.Handler {
+func SetupHandler(
+	memStorage repository.Storage,
+	activeRequests *sync.WaitGroup,
+	shutdownChan chan struct{},
+) http.Handler {
 	r := chi.NewRouter()
 
 	compressorService := service.NewGzipCompressor()
 
-	setupMiddlewares(r, compressorService)
-
-	memStorage := repository.NewMemStorage()
+	setupMiddlewares(
+		r,
+		compressorService,
+		activeRequests,
+		shutdownChan,
+	)
 
 	mainPageHandler := newMainPageService(memStorage)
 	setupMainRoutes(r, mainPageHandler)
@@ -29,9 +37,15 @@ func SetupHandler() http.Handler {
 	return r
 }
 
-func setupMiddlewares(r chi.Router, compressorService middlewares.Compressor) {
+func setupMiddlewares(
+	r chi.Router,
+	compressorService middlewares.Compressor,
+	activeRequests *sync.WaitGroup,
+	shutdownChan chan struct{},
+) {
 	r.Use(middlewares.RequestLogger)
 	r.Use(middlewares.ResponseLogger)
+	r.Use(middlewares.TrackActiveRequests(activeRequests, shutdownChan))
 	r.Use(middlewares.Compress(compressorService))
 }
 

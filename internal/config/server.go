@@ -8,6 +8,14 @@ import (
 	"github.com/spf13/pflag"
 )
 
+type ServerFlags struct {
+	ServerAddr      string `env:"ADDRESS"`
+	LogLevel        string `env:"LOGLEVEL" envDefault:"info"`
+	StoreInterval   int    `env:"STORE_INTERVAL"`
+	FileStoragePath string `env:"FILE_STORAGE_PATH"`
+	Restore         bool   `env:"RESTORE"`
+}
+
 func ParseServerConfig() *ServerFlags {
 
 	var cfg ServerFlags
@@ -22,6 +30,9 @@ func ParseServerConfig() *ServerFlags {
 func setDefaultServerFlag(cfg *ServerFlags) {
 	cfg.ServerAddr = "http://localhost:8080"
 	cfg.LogLevel = "info"
+	cfg.StoreInterval = 300
+	cfg.FileStoragePath = "metrics.json"
+	cfg.Restore = false
 }
 
 func parseServerEnv(cfg *ServerFlags) {
@@ -36,6 +47,9 @@ func parseServerFlag(cfg *ServerFlags) {
 
 	flags.StringVarP(&cfg.ServerAddr, "address", "a", ":8080", "HTTP server port")
 	flags.StringVarP(&cfg.LogLevel, "loglevel", "l", "info", "Logger level")
+	flags.IntVarP(&cfg.StoreInterval, "strIntrvl", "i", 300, "Disc save interval, s")
+	flags.StringVarP(&cfg.FileStoragePath, "filePath", "f", "metrics.json", "Path to file to save metrics")
+	flags.BoolVarP(&cfg.Restore, "restore", "r", false, "Load metrics on start")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
