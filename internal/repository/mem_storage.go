@@ -14,11 +14,14 @@ import (
 )
 
 type memStorage struct {
-	mu       sync.RWMutex
-	ticker   *time.Ticker
+	mu       *sync.RWMutex
 	counters map[string]int64
 	gauges   map[string]float64
-	done     chan bool
+	cfg      *config.ServerFlags
+
+	tickerMu *sync.Mutex
+	ticker   *time.Ticker
+	done     chan struct{}
 }
 
 func NewMemStorage(cfg *config.ServerFlags) Storage {
@@ -26,10 +29,19 @@ func NewMemStorage(cfg *config.ServerFlags) Storage {
 	storage := &memStorage{
 		counters: make(map[string]int64),
 		gauges:   make(map[string]float64),
+		cfg:      cfg,
+		done:     make(chan struct{}),
 	}
 
 	if cfg.Restore {
 		storage.LoadFromFile(cfg.FileStoragePath)
+	}
+
+	if cfg.StoreInterval > 0 {
+		storage.StartPeriodicSave(
+			time.Duration(cfg.StoreInterval)*time.Second,
+			cfg.FileStoragePath,
+		)
 	}
 
 	return storage
@@ -168,6 +180,14 @@ func (m *memStorage) LoadFromFile(filename string) error {
 }
 
 func (m *memStorage) StartPeriodicSave(interval time.Duration, filename string) {
+	m.tickerMu.Lock()
+	defer m.tickerMu.Unlock()
+
+	if m.ticker != nil {
+		logger.Log.Warn("periodic save already started")
+		return
+	}
+
 	m.ticker = time.NewTicker(interval)
 
 	go func() {
@@ -175,23 +195,36 @@ func (m *memStorage) StartPeriodicSave(interval time.Duration, filename string) 
 			select {
 			case <-m.ticker.C:
 				if err := m.SaveToFile(filename); err != nil {
-					logger.Log.Error("Ошибка сохранения: ", zap.Error(err))
+					logger.Log.Error("failed to save: ", zap.Error(err))
 				} else {
-					logger.Log.Info("Данные сохранены в файл", zap.String("file_name", filename))
+					logger.Log.Info("metrics save to file", zap.String("file_name", filename))
 				}
 			case <-m.done:
+				logger.Log.Info("periodic save stopped")
 				return
 			}
 		}
 	}()
 }
 
-func (m *memStorage) StopPeriodicSave() {
+func (m *memStorage) Close() error {
+	m.tickerMu.Lock()
+	defer m.tickerMu.Unlock()
+
 	if m.ticker != nil {
 		m.ticker.Stop()
+		m.ticker = nil
 	}
+
 	select {
-	case m.done <- true:
+	case <-m.done:
 	default:
+		close(m.done)
 	}
+
+	if err := m.SaveToFile(m.cfg.FileStoragePath); err != nil {
+		return fmt.Errorf("failed to save on close: %w", err)
+	}
+
+	return nil
 }

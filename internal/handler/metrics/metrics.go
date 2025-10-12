@@ -183,11 +183,3 @@ func (h *MetricsHandler) processMetricUpdate(metricType, metricName, metricValue
 
 	return http.StatusOK, nil
 }
-
-// func writeErrorBadRequests(w http.ResponseWriter, err error) bool {
-// 	if err != nil {
-// 		http.Error(w, err.Error(), http.StatusBadRequest)
-// 		return true
-// 	}
-// 	return false
-// }

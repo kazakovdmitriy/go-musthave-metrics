@@ -6,4 +6,5 @@ type Storage interface {
 	GetGauge(name string) (float64, bool)
 	GetCounter(name string) (int64, bool)
 	GetAllMetrics() (string, error)
+	Close() error
 }

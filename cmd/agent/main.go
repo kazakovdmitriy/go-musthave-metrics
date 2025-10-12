@@ -82,6 +82,7 @@ func main() {
 				if err != nil {
 					logger.Log.Error("error from server", zap.Error(err))
 				}
+				logger.Log.Info("metrics sent successfully")
 			case <-ctx.Done():
 				return
 			}

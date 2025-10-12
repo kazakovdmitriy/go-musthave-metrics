@@ -32,15 +32,7 @@ func run() error {
 	}
 
 	memStorage := repository.NewMemStorage(cfg)
-
-	if cfg.StoreInterval > 0 {
-		stopBackup := repository.StartStorageBackup(
-			memStorage,
-			time.Duration(cfg.StoreInterval)*time.Second,
-			cfg.FileStoragePath,
-		)
-		defer stopBackup()
-	}
+	defer memStorage.Close()
 
 	var activeRequests sync.WaitGroup
 	shutdownChan := make(chan struct{})
