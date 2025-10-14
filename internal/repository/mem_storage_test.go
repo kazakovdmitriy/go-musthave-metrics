@@ -6,10 +6,12 @@ import (
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/stretchr/testify/assert"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestMemStorage_UpdateAndGetGauge(t *testing.T) {
-	storage := NewMemStorage(&config.ServerFlags{})
+	logger := zaptest.NewLogger(t)
+	storage := NewMemStorage(&config.ServerFlags{}, logger)
 	name := "test_gauge"
 	value := 42.5
 
@@ -21,7 +23,8 @@ func TestMemStorage_UpdateAndGetGauge(t *testing.T) {
 }
 
 func TestMemStorage_UpdateAndGetCounter(t *testing.T) {
-	storage := NewMemStorage(&config.ServerFlags{})
+	logger := zaptest.NewLogger(t)
+	storage := NewMemStorage(&config.ServerFlags{}, logger)
 	name := "test_counter"
 	value := int64(100)
 
@@ -33,7 +36,8 @@ func TestMemStorage_UpdateAndGetCounter(t *testing.T) {
 }
 
 func TestMemStorage_UpdateCounterIncrement(t *testing.T) {
-	storage := NewMemStorage(&config.ServerFlags{})
+	logger := zaptest.NewLogger(t)
+	storage := NewMemStorage(&config.ServerFlags{}, logger)
 	name := "test_counter"
 
 	storage.UpdateCounter(name, 10)
@@ -45,7 +49,8 @@ func TestMemStorage_UpdateCounterIncrement(t *testing.T) {
 }
 
 func TestMemStorage_GetNonExistent(t *testing.T) {
-	storage := NewMemStorage(&config.ServerFlags{})
+	logger := zaptest.NewLogger(t)
+	storage := NewMemStorage(&config.ServerFlags{}, logger)
 
 	_, ok := storage.GetGauge("nonexistent")
 	assert.False(t, ok)
@@ -55,7 +60,8 @@ func TestMemStorage_GetNonExistent(t *testing.T) {
 }
 
 func TestMemStorage_GetAllMetrics(t *testing.T) {
-	storage := NewMemStorage(&config.ServerFlags{})
+	logger := zaptest.NewLogger(t)
+	storage := NewMemStorage(&config.ServerFlags{}, logger)
 	storage.UpdateGauge("gauge1", 3.14)
 	storage.UpdateCounter("counter1", 42)
 
@@ -66,14 +72,16 @@ func TestMemStorage_GetAllMetrics(t *testing.T) {
 }
 
 func TestMemStorage_GetAllMetrics_Empty(t *testing.T) {
-	storage := NewMemStorage(&config.ServerFlags{})
+	logger := zaptest.NewLogger(t)
+	storage := NewMemStorage(&config.ServerFlags{}, logger)
 	_, err := storage.GetAllMetrics()
 	assert.Error(t, err)
 	assert.Equal(t, "no metrics found", err.Error())
 }
 
 func TestMemStorage_ConcurrentAccess(t *testing.T) {
-	storage := NewMemStorage(&config.ServerFlags{})
+	logger := zaptest.NewLogger(t)
+	storage := NewMemStorage(&config.ServerFlags{}, logger)
 	var wg sync.WaitGroup
 	const workers = 10
 	const increments = 100

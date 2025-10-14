@@ -3,157 +3,238 @@ package service
 import (
 	"bytes"
 	"compress/gzip"
+	"fmt"
 	"io"
-	"net/http"
-	"net/http/httptest"
-	"strings"
 	"testing"
 )
 
-func TestGzipCompressor_CompressResponse_GzipNotAccepted(t *testing.T) {
-	g := NewGzipCompressor()
-	recorder := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
+func TestCompress(t *testing.T) {
+	tests := []struct {
+		name    string
+		data    []byte
+		level   int
+		wantErr bool
+	}{
+		{
+			name:    "empty data",
+			data:    []byte{},
+			level:   gzip.DefaultCompression,
+			wantErr: false,
+		},
+		{
+			name:    "normal data",
+			data:    []byte("hello world"),
+			level:   gzip.DefaultCompression,
+			wantErr: false,
+		},
+		{
+			name:    "best speed",
+			data:    []byte("test data for compression"),
+			level:   gzip.BestSpeed,
+			wantErr: false,
+		},
+		{
+			name:    "best compression",
+			data:    []byte("test data for compression"),
+			level:   gzip.BestCompression,
+			wantErr: false,
+		},
+		{
+			name:    "invalid compression level",
+			data:    []byte("test"),
+			level:   10, // invalid level
+			wantErr: true,
+		},
+	}
 
-	w := g.CompressResponse(recorder, req)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Compress(tt.data, tt.level)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Compress() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if tt.wantErr {
+				return
+			}
 
-	_, err := w.Write([]byte("Hello, plain!"))
+			// Verify that decompression works correctly
+			decompressed, err := Decompress(got)
+			if err != nil {
+				t.Errorf("Decompress() after Compress() failed: %v", err)
+				return
+			}
+
+			if !bytes.Equal(decompressed, tt.data) {
+				t.Errorf("Compress() decompressed data = %v, want %v", decompressed, tt.data)
+			}
+		})
+	}
+}
+
+func TestDecompress(t *testing.T) {
+	// Create compressed data for testing
+	originalData := []byte("hello world")
+	compressedData, err := Compress(originalData, gzip.DefaultCompression)
 	if err != nil {
-		t.Fatalf("Write failed: %v", err)
+		t.Fatalf("Failed to create test compressed data: %v", err)
 	}
 
-	if _, ok := w.(*compressWriter); ok {
-		t.Fatal("Expected plain ResponseWriter, got compressWriter")
+	tests := []struct {
+		name    string
+		data    []byte
+		want    []byte
+		wantErr bool
+	}{
+		{
+			name:    "empty data",
+			data:    []byte{},
+			want:    []byte{},
+			wantErr: false,
+		},
+		{
+			name:    "valid compressed data",
+			data:    compressedData,
+			want:    originalData,
+			wantErr: false,
+		},
+		{
+			name:    "invalid compressed data",
+			data:    []byte("not compressed data"),
+			want:    nil,
+			wantErr: true,
+		},
+		{
+			name:    "nil data",
+			data:    nil,
+			want:    nil,
+			wantErr: false,
+		},
 	}
 
-	if recorder.Header().Get("Content-Encoding") != "" {
-		t.Errorf("Expected no Content-Encoding, got %s", recorder.Header().Get("Content-Encoding"))
-	}
-
-	if recorder.Body.String() != "Hello, plain!" {
-		t.Errorf("Expected 'Hello, plain!', got %q", recorder.Body.String())
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := Decompress(tt.data)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("Decompress() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !tt.wantErr && !bytes.Equal(got, tt.want) {
+				t.Errorf("Decompress() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 
-func TestGzipCompressor_CompressResponse_StatusError_NoGzipHeader(t *testing.T) {
-	g := NewGzipCompressor()
-	recorder := httptest.NewRecorder()
-	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.Header.Set("Accept-Encoding", "gzip")
-
-	w := g.CompressResponse(recorder, req)
-	w.WriteHeader(http.StatusNotFound)
-
-	w.Write([]byte("Not found"))
-
-	if cw, ok := w.(*compressWriter); ok {
-		cw.Close()
-	}
-
-	if recorder.Header().Get("Content-Encoding") == "gzip" {
-		t.Error("Content-Encoding should not be set for error status")
-	}
-}
-
-func TestGzipCompressor_DecompressRequest_GzipEncoded(t *testing.T) {
+func TestStreamCompressor_NewWriter(t *testing.T) {
+	sc := NewStreamCompressor()
 	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	_, err := gw.Write([]byte("Compressed request body"))
-	if err != nil {
-		t.Fatalf("Failed to write to gzip: %v", err)
-	}
-	gw.Close()
+	writer := sc.NewWriter(&buf)
 
-	req := httptest.NewRequest(http.MethodPost, "/", &buf)
-	req.Header.Set("Content-Encoding", "gzip")
-
-	g := NewGzipCompressor()
-	err = g.DecompressRequest(req)
-	if err != nil {
-		t.Fatalf("DecompressRequest failed: %v", err)
+	if writer == nil {
+		t.Fatal("NewWriter() returned nil")
 	}
 
-	body, err := io.ReadAll(req.Body)
-	if err != nil {
-		t.Fatalf("Failed to read decompressed body: %v", err)
+	// Test that writer actually works
+	testData := []byte("stream test")
+	if _, err := writer.Write(testData); err != nil {
+		t.Fatalf("Write() failed: %v", err)
 	}
-	req.Body.Close()
+	if err := writer.Close(); err != nil {
+		t.Fatalf("Close() failed: %v", err)
+	}
 
-	if string(body) != "Compressed request body" {
-		t.Errorf("Expected 'Compressed request body', got %q", string(body))
+	// Verify compression worked
+	decompressed, err := Decompress(buf.Bytes())
+	if err != nil {
+		t.Fatalf("Decompress() failed: %v", err)
+	}
+	if !bytes.Equal(decompressed, testData) {
+		t.Errorf("Decompressed data = %v, want %v", decompressed, testData)
 	}
 }
 
-func TestGzipCompressor_DecompressRequest_NotGzipEncoded(t *testing.T) {
-	body := "Plain request body"
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
-
-	g := NewGzipCompressor()
-	err := g.DecompressRequest(req)
+func TestStreamCompressor_NewReader(t *testing.T) {
+	// Create compressed data
+	testData := []byte("stream reader test")
+	compressedData, err := Compress(testData, gzip.DefaultCompression)
 	if err != nil {
-		t.Fatalf("DecompressRequest should not fail for non-gzip: %v", err)
+		t.Fatalf("Failed to compress test data: %v", err)
 	}
 
-	readBody, err := io.ReadAll(req.Body)
+	sc := NewStreamCompressor()
+	reader, err := sc.NewReader(bytes.NewReader(compressedData))
 	if err != nil {
-		t.Fatalf("Failed to read body: %v", err)
+		t.Fatalf("NewReader() failed: %v", err)
 	}
-	req.Body.Close()
+	defer reader.Close()
 
-	if string(readBody) != body {
-		t.Errorf("Expected %q, got %q", body, string(readBody))
+	decompressed, err := io.ReadAll(reader)
+	if err != nil {
+		t.Fatalf("ReadAll() failed: %v", err)
+	}
+
+	if !bytes.Equal(decompressed, testData) {
+		t.Errorf("Decompressed data = %v, want %v", decompressed, testData)
 	}
 }
 
-func TestGzipCompressor_DecompressRequest_InvalidGzip(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/", strings.NewReader("not gzipped"))
-	req.Header.Set("Content-Encoding", "gzip")
+func TestCompressDecompressRoundTrip(t *testing.T) {
+	testCases := [][]byte{
+		{},
+		{0},
+		{1, 2, 3, 4, 5},
+		[]byte("Hello, World!"),
+		[]byte("The quick brown fox jumps over the lazy dog"),
+		bytes.Repeat([]byte("a"), 1000), // larger data
+	}
 
-	g := NewGzipCompressor()
-	err := g.DecompressRequest(req)
-	if err == nil {
-		t.Fatal("Expected error for invalid gzip data")
+	for i, original := range testCases {
+		t.Run(fmt.Sprintf("TestCase_%d", i), func(t *testing.T) {
+			compressed, err := Compress(original, gzip.DefaultCompression)
+			if err != nil {
+				t.Fatalf("Compress failed: %v", err)
+			}
+
+			decompressed, err := Decompress(compressed)
+			if err != nil {
+				t.Fatalf("Decompress failed: %v", err)
+			}
+
+			if !bytes.Equal(original, decompressed) {
+				t.Errorf("Round-trip failed. Original: %v, Got: %v", original, decompressed)
+			}
+		})
 	}
 }
 
-func TestCompressWriter_Close(t *testing.T) {
-	recorder := httptest.NewRecorder()
-	cw := newCompressWriter(recorder)
+func TestStreamCompressor_RoundTrip(t *testing.T) {
+	sc := NewStreamCompressor()
+	original := []byte("stream round trip test")
 
-	_, err := cw.Write([]byte("test"))
-	if err != nil {
+	// Compress using stream
+	var compressedBuf bytes.Buffer
+	writer := sc.NewWriter(&compressedBuf)
+	if _, err := writer.Write(original); err != nil {
 		t.Fatalf("Write failed: %v", err)
 	}
-
-	err = cw.Close()
-	if err != nil {
+	if err := writer.Close(); err != nil {
 		t.Fatalf("Close failed: %v", err)
 	}
 
-	_, err = cw.Write([]byte("more"))
-	if err == nil {
-		t.Error("Expected error after Close")
-	}
-}
-
-func TestCompressReader_Close(t *testing.T) {
-	var buf bytes.Buffer
-	gw := gzip.NewWriter(&buf)
-	gw.Write([]byte("data"))
-	gw.Close()
-
-	cr, err := newCompressReader(io.NopCloser(&buf))
+	// Decompress using stream
+	reader, err := sc.NewReader(&compressedBuf)
 	if err != nil {
-		t.Fatalf("newCompressReader failed: %v", err)
+		t.Fatalf("NewReader failed: %v", err)
 	}
+	defer reader.Close()
 
-	_, err = io.ReadAll(cr)
+	decompressed, err := io.ReadAll(reader)
 	if err != nil {
 		t.Fatalf("ReadAll failed: %v", err)
 	}
 
-	err = cr.Close()
-	if err != nil {
-		t.Fatalf("Close failed: %v", err)
+	if !bytes.Equal(original, decompressed) {
+		t.Errorf("Stream round-trip failed. Original: %v, Got: %v", original, decompressed)
 	}
 }

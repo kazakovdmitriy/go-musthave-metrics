@@ -1,93 +1,54 @@
 package service
 
 import (
+	"bytes"
 	"compress/gzip"
 	"io"
-	"net/http"
-	"strings"
 )
 
-type GzipCompressor struct{}
-
-func NewGzipCompressor() *GzipCompressor {
-	return &GzipCompressor{}
-}
-
-// compressWriter обертка для сжатия ответа
-type compressWriter struct {
-	w  http.ResponseWriter
-	zw *gzip.Writer
-}
-
-func newCompressWriter(w http.ResponseWriter) *compressWriter {
-	return &compressWriter{
-		w:  w,
-		zw: gzip.NewWriter(w),
+func Compress(data []byte, level int) ([]byte, error) {
+	if len(data) == 0 {
+		return data, nil
 	}
-}
 
-func (c *compressWriter) Header() http.Header {
-	return c.w.Header()
-}
-
-func (c *compressWriter) Write(p []byte) (int, error) {
-	return c.zw.Write(p)
-}
-
-func (c *compressWriter) WriteHeader(statusCode int) {
-	if statusCode < 300 {
-		c.w.Header().Set("Content-Encoding", "gzip")
-	}
-	c.w.WriteHeader(statusCode)
-}
-
-func (c *compressWriter) Close() error {
-	return c.zw.Close()
-}
-
-// compressReader обертка для распаковки запроса
-type compressReader struct {
-	r  io.ReadCloser
-	zr *gzip.Reader
-}
-
-func newCompressReader(r io.ReadCloser) (*compressReader, error) {
-	zr, err := gzip.NewReader(r)
+	var buf bytes.Buffer
+	gz, err := gzip.NewWriterLevel(&buf, level)
 	if err != nil {
 		return nil, err
 	}
-
-	return &compressReader{
-		r:  r,
-		zr: zr,
-	}, nil
-}
-
-func (c compressReader) Read(p []byte) (n int, err error) {
-	return c.zr.Read(p)
-}
-
-func (c *compressReader) Close() error {
-	if err := c.r.Close(); err != nil {
-		return err
+	if _, err := gz.Write(data); err != nil {
+		return nil, err
 	}
-	return c.zr.Close()
+	if err := gz.Close(); err != nil {
+		return nil, err
+	}
+	return buf.Bytes(), nil
 }
 
-func (g *GzipCompressor) CompressResponse(w http.ResponseWriter, r *http.Request) http.ResponseWriter {
-	if strings.Contains(r.Header.Get("Accept-Encoding"), "gzip") {
-		return newCompressWriter(w)
+func Decompress(data []byte) ([]byte, error) {
+	if len(data) == 0 {
+		return data, nil
 	}
-	return w
+
+	r, err := gzip.NewReader(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
+
+	return io.ReadAll(r)
 }
 
-func (g *GzipCompressor) DecompressRequest(r *http.Request) error {
-	if strings.Contains(r.Header.Get("Content-Encoding"), "gzip") {
-		cr, err := newCompressReader(r.Body)
-		if err != nil {
-			return err
-		}
-		r.Body = cr
-	}
-	return nil
+type StreamCompressor struct{}
+
+func NewStreamCompressor() *StreamCompressor {
+	return &StreamCompressor{}
+}
+
+func (s *StreamCompressor) NewWriter(w io.Writer) *gzip.Writer {
+	return gzip.NewWriter(w)
+}
+
+func (s *StreamCompressor) NewReader(r io.Reader) (*gzip.Reader, error) {
+	return gzip.NewReader(r)
 }

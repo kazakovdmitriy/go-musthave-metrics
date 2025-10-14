@@ -2,6 +2,8 @@ package middlewares
 
 import (
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
 type Compressor interface {
@@ -9,11 +11,13 @@ type Compressor interface {
 	DecompressRequest(r *http.Request) error
 }
 
-func Compress(compressor Compressor) func(next http.Handler) http.Handler {
+func Compress(compressor Compressor, log *zap.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if err := compressor.DecompressRequest(r); err != nil {
-				http.Error(w, err.Error(), http.StatusInternalServerError)
+				msg := http.StatusText(http.StatusInternalServerError)
+				http.Error(w, msg, http.StatusInternalServerError)
+				log.Error("Decompression error", zap.Error(err))
 				return
 			}
 

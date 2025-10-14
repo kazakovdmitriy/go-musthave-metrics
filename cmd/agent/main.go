@@ -17,11 +17,13 @@ import (
 func main() {
 	cfg := config.ParseAgentConfig()
 
-	if err := logger.Initialize(cfg.LogLevel); err != nil {
-		panic(err)
+	log, err := logger.Initialize(cfg.LogLevel)
+	if err != nil {
+		log.Fatal(err.Error())
 	}
+	defer log.Sync()
 
-	client := agent.NewClient(cfg.ServerAddr)
+	client := agent.NewClient(cfg.ServerAddr, log)
 
 	polingInterval := time.Duration(cfg.PollingInterval) * time.Second
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
@@ -75,12 +77,13 @@ func main() {
 				metricsMutex.RLock()
 				currentMetrics := metrics
 				deltaCount := poolCount
-				poolCount = 0
 				metricsMutex.RUnlock()
 
-				_, err := agent.SendMetrics(client, currentMetrics, int64(deltaCount))
+				_, err := agent.SendMetrics(client, currentMetrics, int64(deltaCount), log)
 				if err != nil {
-					logger.Log.Error("error from server", zap.Error(err))
+					log.Error("error from server", zap.Error(err))
+				} else {
+					poolCount = 0
 				}
 				logger.Log.Info("metrics sent successfully")
 			case <-ctx.Done():
@@ -90,12 +93,12 @@ func main() {
 	}()
 
 	<-sigChan
-	logger.Log.Info("received interrupt signal. shutting down gracefully...")
+	log.Info("received interrupt signal. shutting down gracefully...")
 
 	cancel()
 	pollTicker.Stop()
 	reportTicker.Stop()
 
 	wg.Wait()
-	logger.Log.Info("agent shutdown completed")
+	log.Info("agent shutdown completed")
 }

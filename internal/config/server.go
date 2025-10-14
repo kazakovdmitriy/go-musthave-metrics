@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"log"
 	"os"
 
 	"github.com/caarlos0/env/v6"
@@ -38,7 +38,7 @@ func setDefaultServerFlag(cfg *ServerFlags) {
 func parseServerEnv(cfg *ServerFlags) {
 	err := env.Parse(cfg)
 	if err != nil {
-		fmt.Println(err)
+		log.Printf("Warning: failed to parse environment variables: %v", err)
 	}
 }
 
@@ -52,16 +52,14 @@ func parseServerFlag(cfg *ServerFlags) {
 	flags.BoolVarP(&cfg.Restore, "restore", "r", false, "Load metrics on start")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
-		os.Exit(1)
+		log.Printf("Error parsing command-line flags: %v", err)
 	}
 
 	if flags.NArg() > 0 {
 		for i := 0; i < flags.NArg(); i++ {
 			arg := flags.Arg(i)
 			if len(arg) > 0 && arg[0] == '-' {
-				fmt.Fprintf(os.Stderr, "Error: unknown flag: %s\n", arg)
-				os.Exit(1)
+				log.Printf("Unknown flag: %s", arg)
 			}
 		}
 	}

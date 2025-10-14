@@ -8,29 +8,32 @@ import (
 	"time"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"go.uber.org/zap"
 )
 
 type memStorage struct {
-	mu       *sync.RWMutex
+	mu       *sync.Mutex
 	counters map[string]int64
 	gauges   map[string]float64
 	cfg      *config.ServerFlags
+	log      *zap.Logger
 
 	tickerMu *sync.Mutex
 	ticker   *time.Ticker
 	done     chan struct{}
 }
 
-func NewMemStorage(cfg *config.ServerFlags) Storage {
+func NewMemStorage(cfg *config.ServerFlags, log *zap.Logger) Storage {
 
 	storage := &memStorage{
+		mu:       &sync.Mutex{},
+		tickerMu: &sync.Mutex{},
 		counters: make(map[string]int64),
 		gauges:   make(map[string]float64),
 		cfg:      cfg,
 		done:     make(chan struct{}),
+		log:      log,
 	}
 
 	if cfg.Restore {
@@ -65,8 +68,8 @@ func (m *memStorage) UpdateCounter(name string, value int64) {
 }
 
 func (m *memStorage) GetGauge(name string) (float64, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if metric, exists := m.gauges[name]; exists {
 		return metric, true
 	}
@@ -74,8 +77,8 @@ func (m *memStorage) GetGauge(name string) (float64, bool) {
 }
 
 func (m *memStorage) GetCounter(name string) (int64, bool) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 	if metric, exists := m.counters[name]; exists {
 		return metric, true
 	}
@@ -83,8 +86,8 @@ func (m *memStorage) GetCounter(name string) (int64, bool) {
 }
 
 func (m *memStorage) GetAllMetrics() (string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	var result string
 
@@ -108,8 +111,8 @@ func (m *memStorage) GetAllMetrics() (string, error) {
 }
 
 func (m *memStorage) SaveToFile(filename string) error {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+	m.mu.Lock()
+	defer m.mu.Unlock()
 
 	var metrics []model.Metrics
 
@@ -150,7 +153,7 @@ func (m *memStorage) LoadFromFile(filename string) error {
 	data, err := os.ReadFile(filename)
 	if err != nil {
 		if os.IsNotExist(err) {
-			logger.Log.Error("error while loading file", zap.Error(err))
+			m.log.Error("error while loading file", zap.Error(err))
 			return nil
 		}
 		return fmt.Errorf("failed to read file: %w", err)
@@ -174,7 +177,7 @@ func (m *memStorage) LoadFromFile(filename string) error {
 		}
 	}
 
-	logger.Log.Info("load metrics from file", zap.String("filename", filename))
+	m.log.Info("load metrics from file", zap.String("filename", filename))
 
 	return nil
 }
@@ -184,7 +187,7 @@ func (m *memStorage) StartPeriodicSave(interval time.Duration, filename string) 
 	defer m.tickerMu.Unlock()
 
 	if m.ticker != nil {
-		logger.Log.Warn("periodic save already started")
+		m.log.Warn("periodic save already started")
 		return
 	}
 
@@ -195,12 +198,12 @@ func (m *memStorage) StartPeriodicSave(interval time.Duration, filename string) 
 			select {
 			case <-m.ticker.C:
 				if err := m.SaveToFile(filename); err != nil {
-					logger.Log.Error("failed to save: ", zap.Error(err))
+					m.log.Error("failed to save: ", zap.Error(err))
 				} else {
-					logger.Log.Info("metrics save to file", zap.String("file_name", filename))
+					m.log.Info("metrics save to file", zap.String("file_name", filename))
 				}
 			case <-m.done:
-				logger.Log.Info("periodic save stopped")
+				m.log.Info("periodic save stopped")
 				return
 			}
 		}

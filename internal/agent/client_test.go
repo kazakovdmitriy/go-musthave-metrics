@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"compress/gzip"
 	"encoding/json"
-	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -14,417 +13,408 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.uber.org/zap/zaptest"
 )
 
 func TestNewClient(t *testing.T) {
-	t.Run("should create client with http prefix when no protocol provided", func(t *testing.T) {
-		client := NewClient("example.com:8080")
-		expected := "http://example.com:8080"
-		assert.Equal(t, expected, client.baseURL)
-	})
+	logger := zaptest.NewLogger(t)
+	tests := []struct {
+		name     string
+		baseURL  string
+		expected string
+	}{
+		{
+			name:     "port only",
+			baseURL:  ":8080",
+			expected: "http://localhost:8080",
+		},
+		{
+			name:     "host only",
+			baseURL:  "example.com",
+			expected: "http://example.com",
+		},
+		{
+			name:     "http url",
+			baseURL:  "http://example.com",
+			expected: "http://example.com",
+		},
+		{
+			name:     "https url",
+			baseURL:  "https://example.com  ",
+			expected: "https://example.com  ",
+		},
+		{
+			name:     "with path",
+			baseURL:  "http://example.com/api",
+			expected: "http://example.com/api",
+		},
+	}
 
-	t.Run("should create client with localhost prefix when port only provided", func(t *testing.T) {
-		client := NewClient(":8080")
-		expected := "http://localhost:8080"
-		assert.Equal(t, expected, client.baseURL)
-	})
-
-	t.Run("should preserve existing http protocol", func(t *testing.T) {
-		client := NewClient("http://example.com:8080")
-		expected := "http://example.com:8080"
-		assert.Equal(t, expected, client.baseURL)
-	})
-
-	t.Run("should preserve existing https protocol", func(t *testing.T) {
-		client := NewClient("https://example.com:8080")
-		expected := "https://example.com:8080"
-		assert.Equal(t, expected, client.baseURL)
-	})
-
-	t.Run("should initialize default values", func(t *testing.T) {
-		client := NewClient("http://example.com")
-		assert.True(t, client.UseGzip)
-		assert.Equal(t, 32, client.minSizeToCompress)
-		assert.Equal(t, gzip.DefaultCompression, client.CompressionLevel)
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			client := NewClient(tt.baseURL, logger)
+			assert.Equal(t, tt.expected, client.baseURL)
+			assert.NotNil(t, client.httpClient)
+			assert.Equal(t, time.Second*20, client.httpClient.Timeout)
+			assert.True(t, client.UseGzip)
+			assert.Equal(t, gzip.DefaultCompression, client.CompressionLevel)
+			assert.Equal(t, 32, client.minSizeToCompress)
+		})
+	}
 }
 
 func TestClient_SetHeaders(t *testing.T) {
-	client := NewClient("http://example.com")
-	client.SetHeaders("Authorization", "Bearer token123")
+	logger := zaptest.NewLogger(t)
+	client := NewClient("http://example.com", logger)
+	client.SetHeaders("Authorization", "Bearer token")
 	client.SetHeaders("X-Custom", "value")
 
-	assert.Equal(t, "Bearer token123", client.headers["Authorization"])
+	assert.Equal(t, "Bearer token", client.headers["Authorization"])
 	assert.Equal(t, "value", client.headers["X-Custom"])
 }
 
 func TestClient_SetCompression(t *testing.T) {
-	client := NewClient("http://example.com")
+	logger := zaptest.NewLogger(t)
+	client := NewClient("http://example.com", logger)
 
-	t.Run("should disable compression when useGzip is false", func(t *testing.T) {
-		client.SetCompression(false, 6)
-		assert.False(t, client.UseGzip)
-	})
+	// Test valid compression level
+	client.SetCompression(true, gzip.BestCompression)
+	assert.True(t, client.UseGzip)
+	assert.Equal(t, gzip.BestCompression, client.CompressionLevel)
 
-	t.Run("should set valid compression level", func(t *testing.T) {
-		client.SetCompression(true, gzip.BestCompression)
-		assert.Equal(t, gzip.BestCompression, client.CompressionLevel)
-	})
+	// Test invalid compression level (should default to DefaultCompression)
+	client.SetCompression(true, 100) // invalid level
+	assert.True(t, client.UseGzip)
+	assert.Equal(t, gzip.DefaultCompression, client.CompressionLevel)
 
-	t.Run("should reset to default when invalid level provided", func(t *testing.T) {
-		client.SetCompression(true, -100)
-		assert.Equal(t, gzip.DefaultCompression, client.CompressionLevel)
-
-		client.SetCompression(true, 100)
-		assert.Equal(t, gzip.DefaultCompression, client.CompressionLevel)
-	})
+	// Test disabling compression
+	client.SetCompression(false, gzip.DefaultCompression)
+	assert.False(t, client.UseGzip)
 }
 
 func TestClient_SetMinSizeToCompress(t *testing.T) {
-	client := NewClient("http://example.com")
+	logger := zaptest.NewLogger(t)
+	client := NewClient("http://example.com", logger)
 	client.SetMinSizeToCompress(100)
+
 	assert.Equal(t, 100, client.minSizeToCompress)
 }
 
-func TestClient_compressData(t *testing.T) {
-	client := NewClient("http://example.com")
-
-	t.Run("should compress data larger than minSizeToCompress", func(t *testing.T) {
-		data := []byte(strings.Repeat("a", 100))
-		compressed, err := client.compressData(data)
-		require.NoError(t, err)
-		assert.Less(t, len(compressed), len(data))
-
-		reader, err := gzip.NewReader(bytes.NewReader(compressed))
-		require.NoError(t, err)
-		decompressed, err := io.ReadAll(reader)
-		require.NoError(t, err)
-		assert.Equal(t, data, decompressed)
-	})
-
-	t.Run("should not compress data smaller than minSizeToCompress", func(t *testing.T) {
-		data := []byte("small")
-		compressed, err := client.compressData(data)
-		require.NoError(t, err)
-		assert.Equal(t, data, compressed)
-	})
-
-	t.Run("should handle compression errors", func(t *testing.T) {
-		client.CompressionLevel = -100 // invalid
-		data := []byte(strings.Repeat("a", 100))
-		_, err := client.compressData(data)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "creating gzip writer failed")
-	})
-}
-
 func TestClient_shouldCompressRequest(t *testing.T) {
-	client := NewClient("http://example.com")
+	logger := zaptest.NewLogger(t)
+	client := NewClient("http://example.com", logger)
 
-	t.Run("should return false when compression is disabled", func(t *testing.T) {
-		client.UseGzip = false
-		result := client.shouldCompressRequest([]byte(strings.Repeat("a", 100)))
-		assert.False(t, result)
-	})
+	// Test with compression disabled
+	client.UseGzip = false
+	assert.False(t, client.shouldCompressRequest([]byte("small data")))
+	assert.False(t, client.shouldCompressRequest(make([]byte, 100)))
 
-	t.Run("should return false when data is smaller than minSizeToCompress", func(t *testing.T) {
-		client.UseGzip = true
-		result := client.shouldCompressRequest([]byte("small"))
-		assert.False(t, result)
-	})
-
-	t.Run("should return true when compression is enabled and data is large enough", func(t *testing.T) {
-		client.UseGzip = true
-		result := client.shouldCompressRequest([]byte(strings.Repeat("a", 100)))
-		assert.True(t, result)
-	})
-}
-
-func TestClient_Post(t *testing.T) {
-	t.Run("should send POST request with JSON body", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, http.MethodPost, r.Method)
-			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
-			assert.Equal(t, "gzip", r.Header.Get("Accept-Encoding"))
-
-			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
-
-			var data map[string]interface{}
-			err = json.Unmarshal(body, &data)
-			require.NoError(t, err)
-			assert.Equal(t, "test", data["name"])
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status": "ok"}`))
-		}))
-		defer server.Close()
-
-		client := NewClient(server.URL)
-		response, err := client.Post("/test", map[string]string{"name": "test"})
-		require.NoError(t, err)
-
-		var result map[string]interface{}
-		err = json.Unmarshal(response, &result)
-		require.NoError(t, err)
-		assert.Equal(t, "ok", result["status"])
-	})
-
-	t.Run("should handle compressed request body", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
-
-			gz, err := gzip.NewReader(r.Body)
-			require.NoError(t, err)
-			defer gz.Close()
-
-			body, err := io.ReadAll(gz)
-			require.NoError(t, err)
-
-			var data map[string]interface{}
-			err = json.Unmarshal(body, &data)
-			require.NoError(t, err)
-			assert.Equal(t, "large_data", data["name"])
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status": "compressed_ok"}`))
-		}))
-		defer server.Close()
-
-		client := NewClient(server.URL)
-		largeData := map[string]string{
-			"name": "large_data",
-			"data": strings.Repeat("x", 100),
-		}
-		response, err := client.Post("/test", largeData)
-		require.NoError(t, err)
-
-		var result map[string]interface{}
-		err = json.Unmarshal(response, &result)
-		require.NoError(t, err)
-		assert.Equal(t, "compressed_ok", result["status"])
-	})
-
-	t.Run("should handle compressed response", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Content-Encoding", "gzip")
-
-			var buf bytes.Buffer
-			gz := gzip.NewWriter(&buf)
-			gz.Write([]byte(`{"compressed": true, "data": "response_data"}`))
-			gz.Close()
-
-			w.Write(buf.Bytes())
-		}))
-		defer server.Close()
-
-		client := NewClient(server.URL)
-		response, err := client.Post("/test", map[string]string{"test": "data"})
-		require.NoError(t, err)
-
-		var result map[string]interface{}
-		err = json.Unmarshal(response, &result)
-		require.NoError(t, err)
-		assert.Equal(t, true, result["compressed"])
-		assert.Equal(t, "response_data", result["data"])
-	})
-
-	t.Run("should handle request errors", func(t *testing.T) {
-		client := NewClient("http://invalid-url-that-does-not-exist:9999")
-		_, err := client.Post("/test", map[string]string{"test": "data"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "executing request failed")
-	})
-
-	t.Run("should handle HTTP error status codes", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(`{"error": "not found"}`))
-		}))
-		defer server.Close()
-
-		client := NewClient(server.URL)
-		_, err := client.Post("/nonexistent", map[string]string{"test": "data"})
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "request failed with status 404")
-		assert.Contains(t, err.Error(), "not found")
-	})
-
-	t.Run("should send custom headers", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "Bearer token123", r.Header.Get("Authorization"))
-			assert.Equal(t, "custom-value", r.Header.Get("X-Custom-Header"))
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status": "headers_received"}`))
-		}))
-		defer server.Close()
-
-		client := NewClient(server.URL)
-		client.SetHeaders("Authorization", "Bearer token123")
-		client.SetHeaders("X-Custom-Header", "custom-value")
-
-		_, err := client.Post("/test", map[string]string{"test": "data"})
-		require.NoError(t, err)
-	})
+	// Test with compression enabled but small data
+	client.UseGzip = true
+	client.minSizeToCompress = 32
+	assert.False(t, client.shouldCompressRequest([]byte("small")))
+	assert.True(t, client.shouldCompressRequest(make([]byte, 32)))
+	assert.True(t, client.shouldCompressRequest(make([]byte, 100)))
 }
 
 func TestClient_Get(t *testing.T) {
-	t.Run("should send GET request without body", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, http.MethodGet, r.Method)
-			assert.Equal(t, "", r.Header.Get("Content-Encoding"))
+	logger := zaptest.NewLogger(t)
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+		assert.Equal(t, "/test", r.URL.Path)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "ok"}`))
+	}))
+	defer server.Close()
 
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"method": "GET", "status": "ok"}`))
+	client := NewClient(server.URL, logger)
+
+	resp, err := client.Get("/test")
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "ok"}`, string(resp))
+}
+
+func TestClient_Post(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	type testData struct {
+		Name  string `json:"name"`
+		Value int    `json:"value"`
+	}
+
+	expectedData := testData{Name: "test", Value: 42}
+
+	// Create a test server
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "/test", r.URL.Path)
+		assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
+
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		var receivedData testData
+		err = json.Unmarshal(body, &receivedData)
+		require.NoError(t, err)
+		assert.Equal(t, expectedData, receivedData)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "created"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, logger)
+
+	resp, err := client.Post("/test", expectedData)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "created"}`, string(resp))
+}
+
+func TestClient_PostWithCompression(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	type testData struct {
+		Data string `json:"data"`
+	}
+
+	largeData := testData{Data: strings.Repeat("x", 100)} // Larger than minSizeToCompress
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "gzip", r.Header.Get("Content-Encoding"))
+
+		// Check if body is compressed
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		// Decompress the body to verify content
+		gz, err := gzip.NewReader(bytes.NewReader(body))
+		require.NoError(t, err)
+		defer gz.Close()
+
+		decompressed, err := io.ReadAll(gz)
+		require.NoError(t, err)
+
+		var receivedData testData
+		err = json.Unmarshal(decompressed, &receivedData)
+		require.NoError(t, err)
+		assert.Equal(t, largeData, receivedData)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "compressed_ok"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, logger)
+	client.SetMinSizeToCompress(50) // Make sure our data will be compressed
+
+	resp, err := client.Post("/test", largeData)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "compressed_ok"}`, string(resp))
+}
+
+func TestClient_PostWithCustomHeaders(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "Bearer test-token", r.Header.Get("Authorization"))
+		assert.Equal(t, "custom-value", r.Header.Get("X-Custom-Header"))
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "headers_ok"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, logger)
+	client.SetHeaders("Authorization", "Bearer test-token")
+	client.SetHeaders("X-Custom-Header", "custom-value")
+
+	resp, err := client.Post("/test", map[string]string{"key": "value"})
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "headers_ok"}`, string(resp))
+}
+
+func TestClient_GetWithGzipResponse(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodGet, r.Method)
+
+		// Compress response
+		var buf bytes.Buffer
+		gz := gzip.NewWriter(&buf)
+		_, _ = gz.Write([]byte(`{"compressed": true}`))
+		gz.Close()
+
+		w.Header().Set("Content-Encoding", "gzip")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(buf.Bytes())
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, logger)
+
+	resp, err := client.Get("/test")
+	require.NoError(t, err)
+	assert.Equal(t, `{"compressed": true}`, string(resp))
+}
+
+func TestClient_ErrorCases(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	t.Run("server returns error status", func(t *testing.T) {
+		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error": "internal server error"}`))
 		}))
 		defer server.Close()
 
-		client := NewClient(server.URL)
-		response, err := client.Get("/test")
-		require.NoError(t, err)
+		client := NewClient(server.URL, logger)
 
-		var result map[string]interface{}
-		err = json.Unmarshal(response, &result)
-		require.NoError(t, err)
-		assert.Equal(t, "GET", result["method"])
-		assert.Equal(t, "ok", result["status"])
+		_, err := client.Get("/error")
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "request failed with status 500")
+		assert.Contains(t, err.Error(), "internal server error")
 	})
 
-	t.Run("should handle compressed GET response", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, http.MethodGet, r.Method)
+	t.Run("invalid json in request", func(t *testing.T) {
+		client := NewClient("http://localhost:9999", logger) // Non-existent server
 
-			w.Header().Set("Content-Type", "application/json")
-			w.Header().Set("Content-Encoding", "gzip")
+		// Create a struct with unmarshalable data
+		invalidData := make(chan int) // This will cause json.Marshal to fail
 
-			var buf bytes.Buffer
-			gz := gzip.NewWriter(&buf)
-			gz.Write([]byte(`{"method": "GET", "compressed": true}`))
-			gz.Close()
-
-			w.Write(buf.Bytes())
-		}))
-		defer server.Close()
-
-		client := NewClient(server.URL)
-		response, err := client.Get("/test")
-		require.NoError(t, err)
-
-		var result map[string]interface{}
-		err = json.Unmarshal(response, &result)
-		require.NoError(t, err)
-		assert.Equal(t, "GET", result["method"])
-		assert.Equal(t, true, result["compressed"])
+		_, err := client.Post("/test", invalidData)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "marshaling payload failed")
 	})
 
-	t.Run("should handle GET request errors", func(t *testing.T) {
-		client := NewClient("http://invalid-url-get:9999")
+	t.Run("network error", func(t *testing.T) {
+		client := NewClient("http://localhost:9999", logger) // Non-existent server
+
 		_, err := client.Get("/test")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "executing request failed")
 	})
 }
 
-func TestClient_MarshalingErrors(t *testing.T) {
-	t.Run("should handle JSON marshaling errors", func(t *testing.T) {
-		client := NewClient("http://example.com")
-
-		ch := make(chan int)
-		_, err := client.Post("/test", ch)
-		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "marshaling payload failed")
-	})
-}
-
 func TestClient_Timeout(t *testing.T) {
-	t.Run("should handle timeout", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			time.Sleep(100 * time.Millisecond)
-			w.WriteHeader(http.StatusOK)
-		}))
-		defer server.Close()
+	logger := zaptest.NewLogger(t)
+	// Create a server that takes too long to respond
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(5 * time.Second) // Longer than client timeout
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "timeout"}`))
+	}))
+	defer server.Close()
 
-		client := NewClient(server.URL)
-		client.httpClient.Timeout = 50 * time.Millisecond
+	client := NewClient(server.URL, logger)
 
-		_, err := client.Post("/test", map[string]string{"test": "data"})
-		assert.Error(t, err)
-	})
+	// Replace client's HTTP client with one that has context (or just rely on default timeout)
+	// The default timeout is 20s, so we override it to 1s for this test
+	client.httpClient = &http.Client{
+		Timeout: time.Second,
+	}
+
+	_, err := client.Get("/test")
+	assert.Error(t, err)
+	assert.Contains(t, err.Error(), "executing request failed")
 }
 
-func TestClient_WithDisabledCompression(t *testing.T) {
-	t.Run("should not compress when disabled", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			assert.Equal(t, "", r.Header.Get("Content-Encoding"))
+func TestIsGzipEncoding(t *testing.T) {
+	tests := []struct {
+		name     string
+		encoding string
+		expected bool
+	}{
+		{
+			name:     "single gzip",
+			encoding: "gzip",
+			expected: true,
+		},
+		{
+			name:     "gzip with other encodings",
+			encoding: "deflate, gzip, br",
+			expected: true,
+		},
+		{
+			name:     "case insensitive",
+			encoding: "GZIP",
+			expected: true,
+		},
+		{
+			name:     "not gzip",
+			encoding: "deflate",
+			expected: false,
+		},
+		{
+			name:     "empty string",
+			encoding: "",
+			expected: false,
+		},
+		{
+			name:     "whitespace",
+			encoding: "  gzip  ",
+			expected: true,
+		},
+	}
 
-			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
-
-			var data map[string]interface{}
-			err = json.Unmarshal(body, &data)
-			require.NoError(t, err)
-			assert.Equal(t, "test", data["name"])
-
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"status": "no_compression"}`))
-		}))
-		defer server.Close()
-
-		client := NewClient(server.URL)
-		client.SetCompression(false, 0)
-
-		response, err := client.Post("/test", map[string]string{"name": "test"})
-		require.NoError(t, err)
-
-		var result map[string]interface{}
-		err = json.Unmarshal(response, &result)
-		require.NoError(t, err)
-		assert.Equal(t, "no_compression", result["status"])
-	})
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := isGzipEncoding(tt.encoding)
+			assert.Equal(t, tt.expected, result)
+		})
+	}
 }
 
-func TestClient_WithCustomMinSize(t *testing.T) {
-	t.Run("should respect custom min size to compress", func(t *testing.T) {
-		server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			hasCompression := r.Header.Get("Content-Encoding") == "gzip"
+func TestClient_PostWithEmptyBody(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, "", r.Header.Get("Content-Encoding")) // Should not have compression header
 
-			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+		assert.Empty(t, body)
 
-			if hasCompression {
-				gz, err := gzip.NewReader(bytes.NewReader(body))
-				require.NoError(t, err)
-				defer gz.Close()
-				body, err = io.ReadAll(gz)
-				require.NoError(t, err)
-			}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "empty_ok"}`))
+	}))
+	defer server.Close()
 
-			var data map[string]interface{}
-			err = json.Unmarshal(body, &data)
-			require.NoError(t, err)
-			assert.Equal(t, "test", data["name"])
+	client := NewClient(server.URL, logger)
 
-			w.Header().Set("Content-Type", "application/json")
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte(`{"compressed": ` + fmt.Sprintf("%t", hasCompression) + `}`))
-		}))
-		defer server.Close()
+	resp, err := client.Post("/test", nil)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "empty_ok"}`, string(resp))
+}
 
-		client := NewClient(server.URL)
-		client.SetMinSizeToCompress(1000)
+func TestClient_CompressionDisabled(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+	data := map[string]interface{}{"large": strings.Repeat("x", 100)}
 
-		response, err := client.Post("/test", map[string]string{"name": "test"})
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "", r.Header.Get("Content-Encoding")) // Should not have compression header
+
+		body, err := io.ReadAll(r.Body)
 		require.NoError(t, err)
 
-		var result map[string]interface{}
-		err = json.Unmarshal(response, &result)
+		var receivedData map[string]interface{}
+		err = json.Unmarshal(body, &receivedData)
 		require.NoError(t, err)
-	})
+		assert.Equal(t, data, receivedData)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "no_compression"}`))
+	}))
+	defer server.Close()
+
+	client := NewClient(server.URL, logger)
+	client.SetCompression(false, gzip.DefaultCompression)
+
+	resp, err := client.Post("/test", data)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "no_compression"}`, string(resp))
 }

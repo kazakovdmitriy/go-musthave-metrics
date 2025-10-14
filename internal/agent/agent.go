@@ -1,12 +1,16 @@
 package agent
 
 import (
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"go.uber.org/zap"
 )
 
-func SendMetrics(client *Client, metrics MemoryMetrics, deltaCounter int64) ([]byte, error) {
+func SendMetrics(
+	client *Client,
+	metrics MemoryMetrics,
+	deltaCounter int64,
+	log *zap.Logger,
+) ([]byte, error) {
 
 	metricsMap := metrics.ToMap()
 
@@ -18,7 +22,7 @@ func SendMetrics(client *Client, metrics MemoryMetrics, deltaCounter int64) ([]b
 		}
 		_, err := client.Post("/update", body)
 		if err != nil {
-			logger.Log.Error(
+			log.Error(
 				"failed to send metric",
 				zap.String("metric", name),
 				zap.Float64("value", value),
@@ -34,7 +38,7 @@ func SendMetrics(client *Client, metrics MemoryMetrics, deltaCounter int64) ([]b
 	}
 	_, err := client.Post("/update", counterBody)
 	if err != nil {
-		logger.Log.Error(
+		log.Error(
 			"failed to send counter",
 			zap.String("metric", counterBody.ID),
 			zap.Int64("value", deltaCounter),
