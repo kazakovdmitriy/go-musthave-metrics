@@ -2,6 +2,7 @@ package config
 
 type ServerFlags struct {
 	ServerAddr string `env:"ADDRESS"`
+	LogLevel   string `env:"LOGLEVEL" envDefault:"info"`
 }
 
 type AgentFlags struct {

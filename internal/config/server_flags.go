@@ -21,6 +21,7 @@ func ParseServerConfig() *ServerFlags {
 
 func setDefaultServerFlag(cfg *ServerFlags) {
 	cfg.ServerAddr = "http://localhost:8080"
+	cfg.LogLevel = "info"
 }
 
 func parseServerEnv(cfg *ServerFlags) {
@@ -34,6 +35,7 @@ func parseServerFlag(cfg *ServerFlags) {
 	flags := pflag.NewFlagSet("server", pflag.ExitOnError)
 
 	flags.StringVarP(&cfg.ServerAddr, "address", "a", ":8080", "HTTP server port")
+	flags.StringVarP(&cfg.LogLevel, "loglevel", "l", "info", "Logger level")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
