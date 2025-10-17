@@ -16,7 +16,7 @@ func main() {
 
 func run() error {
 
-	cfg := config.ParseFlagsServer()
+	cfg := config.ParseServerConfig()
 
 	handler := handler.SetupHandler()
 
