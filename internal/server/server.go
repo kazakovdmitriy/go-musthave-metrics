@@ -12,13 +12,14 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
 )
 
 type Server struct {
 	cfg     *config.ServerFlags
 	log     *zap.Logger
-	storage repository.Storage
+	storage service.Storage
 	server  *http.Server
 }
 

@@ -1,4 +1,4 @@
-package repository
+package mocks
 
 type MockStorage struct {
 	gauges   map[string]float64

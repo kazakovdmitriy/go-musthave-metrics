@@ -8,20 +8,20 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/mainpage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/metrics"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/compressor"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
 )
 
 func SetupHandler(
-	memStorage repository.Storage,
+	memStorage service.Storage,
 	activeRequests *sync.WaitGroup,
 	log *zap.Logger,
 	shutdownChan chan struct{},
 ) http.Handler {
 	r := chi.NewRouter()
 
-	compressorService := middlewares.NewHTTPGzipAdapter()
+	compressorService := compressor.NewHTTPGzipAdapter()
 
 	setupMiddlewares(
 		r,
@@ -42,7 +42,7 @@ func SetupHandler(
 
 func setupMiddlewares(
 	r chi.Router,
-	compressorService middlewares.Compressor,
+	compressorService compressor.Compressor,
 	activeRequests *sync.WaitGroup,
 	shutdownChan chan struct{},
 	log *zap.Logger,
@@ -50,10 +50,10 @@ func setupMiddlewares(
 	r.Use(middlewares.RequestLogger(log))
 	r.Use(middlewares.ResponseLogger(log))
 	r.Use(middlewares.TrackActiveRequests(activeRequests, shutdownChan))
-	r.Use(middlewares.Compress(compressorService, log))
+	r.Use(compressor.Compress(compressorService, log))
 }
 
-func newMainPageService(memStorage repository.Storage) *mainpage.MainPageHandler {
+func newMainPageService(memStorage service.Storage) *mainpage.MainPageHandler {
 	mainPageService := service.NewMainPageService(memStorage)
 	return mainpage.NewMainPageHandler(mainPageService)
 }
@@ -64,7 +64,7 @@ func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {
 	})
 }
 
-func newMetricsHandler(memStorage repository.Storage, log *zap.Logger) *metrics.MetricsHandler {
+func newMetricsHandler(memStorage service.Storage, log *zap.Logger) *metrics.MetricsHandler {
 	metricsServer := service.NewMetricService(memStorage)
 	return metrics.NewMetricsHandler(metricsServer, log)
 }

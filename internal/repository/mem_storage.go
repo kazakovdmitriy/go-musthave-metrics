@@ -9,6 +9,7 @@ import (
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
 )
 
@@ -24,7 +25,7 @@ type memStorage struct {
 	done     chan struct{}
 }
 
-func NewMemStorage(cfg *config.ServerFlags, log *zap.Logger) Storage {
+func NewMemStorage(cfg *config.ServerFlags, log *zap.Logger) service.Storage {
 
 	storage := &memStorage{
 		mu:       &sync.Mutex{},
