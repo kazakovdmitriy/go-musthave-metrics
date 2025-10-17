@@ -3,12 +3,12 @@ package service
 import (
 	"testing"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/mocks"
 	"github.com/stretchr/testify/assert"
 )
 
 func TestMetricsService_UpdateGauge(t *testing.T) {
-	storage := repository.NewMockStorage()
+	storage := mocks.NewMockStorage()
 	service := NewMetricService(storage)
 
 	err := service.UpdateGauge("test_gauge", 123.45)
@@ -20,7 +20,7 @@ func TestMetricsService_UpdateGauge(t *testing.T) {
 }
 
 func TestMetricsService_UpdateCounter(t *testing.T) {
-	storage := repository.NewMockStorage()
+	storage := mocks.NewMockStorage()
 	service := NewMetricService(storage)
 
 	err := service.UpdateCounter("test_counter", 10)
@@ -32,7 +32,7 @@ func TestMetricsService_UpdateCounter(t *testing.T) {
 }
 
 func TestMetricsService_GetGauge(t *testing.T) {
-	storage := repository.NewMockStorage()
+	storage := mocks.NewMockStorage()
 	storage.UpdateGauge("existing_gauge", 99.99)
 	service := NewMetricService(storage)
 
@@ -46,7 +46,7 @@ func TestMetricsService_GetGauge(t *testing.T) {
 }
 
 func TestMetricsService_GetCounter(t *testing.T) {
-	storage := repository.NewMockStorage()
+	storage := mocks.NewMockStorage()
 	storage.UpdateCounter("existing_counter", 5)
 	service := NewMetricService(storage)
 

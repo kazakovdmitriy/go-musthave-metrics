@@ -1,29 +1,33 @@
 package main
 
 import (
-	"net/http"
+	"fmt"
+	"os"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/server"
 	"go.uber.org/zap"
 )
 
 func main() {
-	if err := run(); err != nil {
-		panic(err)
-	}
-}
-
-func run() error {
 	cfg := config.ParseServerConfig()
 
-	if err := logger.Initialise(cfg.LogLevel); err != nil {
-		return err
+	log, err := logger.Initialize(cfg.LogLevel)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "failed to initialize logger: %v\n", err)
+		os.Exit(1)
 	}
+	defer log.Sync()
 
-	handler := handler.SetupHandler()
+	server, err := server.NewApp(cfg, log)
+	if err != nil {
+		log.Fatal("failed to create application", zap.Error(err))
+	}
+	defer server.Close()
 
-	logger.Log.Info("Run server on: ", zap.String("address", cfg.ServerAddr))
-	return http.ListenAndServe(cfg.ServerAddr, handler)
+	if err := server.Run(); err != nil {
+		log.Error("application failed", zap.Error(err))
+		os.Exit(1)
+	}
 }

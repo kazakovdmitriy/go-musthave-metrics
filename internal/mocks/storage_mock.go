@@ -1,4 +1,4 @@
-package repository
+package mocks
 
 type MockStorage struct {
 	gauges   map[string]float64
@@ -32,4 +32,8 @@ func (m *MockStorage) GetCounter(name string) (int64, bool) {
 
 func (m *MockStorage) GetAllMetrics() (string, error) {
 	return "", nil
+}
+
+func (m *MockStorage) Close() error {
+	return nil
 }

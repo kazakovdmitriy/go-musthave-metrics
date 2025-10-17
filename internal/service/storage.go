@@ -1,4 +1,4 @@
-package repository
+package service
 
 type Storage interface {
 	UpdateGauge(name string, value float64)
@@ -6,4 +6,5 @@ type Storage interface {
 	GetGauge(name string) (float64, bool)
 	GetCounter(name string) (int64, bool)
 	GetAllMetrics() (string, error)
+	Close() error
 }

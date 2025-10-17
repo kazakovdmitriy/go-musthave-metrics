@@ -8,6 +8,13 @@ import (
 	"github.com/spf13/pflag"
 )
 
+type AgentFlags struct {
+	ServerAddr      string `env:"ADDRESS"`
+	ReportInterval  int    `env:"REPORT_INTERVAL"`
+	PollingInterval int    `env:"POLL_INTERVAL"`
+	LogLevel        string `env:"LOGLEVEL" envDefault:"info"`
+}
+
 func ParseAgentConfig() *AgentFlags {
 	var cfg AgentFlags
 

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"log"
 	"os"
 	"os/signal"
 	"sync"
@@ -17,11 +18,13 @@ import (
 func main() {
 	cfg := config.ParseAgentConfig()
 
-	if err := logger.Initialise(cfg.LogLevel); err != nil {
-		panic(err)
+	logg, err := logger.Initialize(cfg.LogLevel)
+	if err != nil {
+		log.Fatal(err.Error())
 	}
+	defer logg.Sync()
 
-	client := agent.NewClient(cfg.ServerAddr)
+	client := agent.NewClient(cfg.ServerAddr, logg)
 
 	polingInterval := time.Duration(cfg.PollingInterval) * time.Second
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second
@@ -75,13 +78,15 @@ func main() {
 				metricsMutex.RLock()
 				currentMetrics := metrics
 				deltaCount := poolCount
-				poolCount = 0
 				metricsMutex.RUnlock()
 
-				_, err := agent.SendMetrics(client, currentMetrics, int64(deltaCount))
+				_, err := agent.SendMetrics(client, currentMetrics, int64(deltaCount), logg)
 				if err != nil {
-					logger.Log.Error("error from server", zap.Error(err))
+					logg.Error("error from server", zap.Error(err))
+				} else {
+					poolCount = 0
 				}
+				logg.Info("metrics sent successfully")
 			case <-ctx.Done():
 				return
 			}
@@ -89,12 +94,12 @@ func main() {
 	}()
 
 	<-sigChan
-	logger.Log.Info("received interrupt signal. shutting down gracefully...")
+	logg.Info("received interrupt signal. shutting down gracefully...")
 
 	cancel()
 	pollTicker.Stop()
 	reportTicker.Stop()
 
 	wg.Wait()
-	logger.Log.Info("agent shutdown completed")
+	logg.Info("agent shutdown completed")
 }

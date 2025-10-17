@@ -6,9 +6,13 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
+	"go.uber.org/zap"
 )
 
 type Client struct {
@@ -18,13 +22,13 @@ type Client struct {
 	UseGzip           bool
 	CompressionLevel  int
 	minSizeToCompress int
+	log               *zap.Logger
 }
 
-func NewClient(baseURL string) *Client {
+func NewClient(baseURL string, log *zap.Logger) *Client {
 	if strings.HasPrefix(baseURL, ":") {
 		baseURL = "localhost" + baseURL
 	}
-
 	if !strings.HasPrefix(baseURL, "http://") && !strings.HasPrefix(baseURL, "https://") {
 		baseURL = "http://" + baseURL
 	}
@@ -38,6 +42,7 @@ func NewClient(baseURL string) *Client {
 		UseGzip:           true,
 		CompressionLevel:  gzip.DefaultCompression,
 		minSizeToCompress: 32,
+		log:               log,
 	}
 }
 
@@ -49,49 +54,23 @@ func (c *Client) SetCompression(useGzip bool, level int) {
 	c.UseGzip = useGzip
 	if level < gzip.DefaultCompression || level > gzip.BestCompression {
 		level = gzip.DefaultCompression
+		log.Printf("Compression level %d is out of valid range [%d, %d], using default level %d",
+			level, gzip.DefaultCompression, gzip.BestCompression, gzip.DefaultCompression)
 	}
 	c.CompressionLevel = level
+	log.Printf("Compression settings updated: UseGzip=%v, Level=%d", useGzip, level)
 }
 
 func (c *Client) SetMinSizeToCompress(size int) {
 	c.minSizeToCompress = size
 }
 
-func (c *Client) compressData(data []byte) ([]byte, error) {
-	if len(data) < c.minSizeToCompress {
-		return data, nil
-	}
-
-	var buf bytes.Buffer
-	gz, err := gzip.NewWriterLevel(&buf, c.CompressionLevel)
-	if err != nil {
-		return nil, fmt.Errorf("creating gzip writer failed: %w", err)
-	}
-
-	if _, err := gz.Write(data); err != nil {
-		return nil, fmt.Errorf("compressing data failed: %w", err)
-	}
-
-	if err := gz.Close(); err != nil {
-		return nil, fmt.Errorf("closing gzip writer failed: %w", err)
-	}
-
-	return buf.Bytes(), nil
-}
-
 func (c *Client) shouldCompressRequest(body []byte) bool {
-	if !c.UseGzip {
-		return false
-	}
-	if len(body) < c.minSizeToCompress {
-		return false
-	}
-	return true
+	return c.UseGzip && len(body) >= c.minSizeToCompress
 }
 
 func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, error) {
 	var reader io.Reader
-	var contentEncoding string
 	var bodyData []byte
 
 	if body != nil {
@@ -102,12 +81,11 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 		bodyData = jsonData
 
 		if c.shouldCompressRequest(bodyData) {
-			compressedData, err := c.compressData(bodyData)
+			compressed, err := service.Compress(bodyData, c.CompressionLevel)
 			if err != nil {
 				return nil, fmt.Errorf("compressing request body failed: %w", err)
 			}
-			reader = bytes.NewBuffer(compressedData)
-			contentEncoding = "gzip"
+			reader = bytes.NewBuffer(compressed)
 		} else {
 			reader = bytes.NewBuffer(bodyData)
 		}
@@ -122,11 +100,10 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 		req.Header.Set(key, value)
 	}
 	req.Header.Set("Content-Type", "application/json")
-
 	req.Header.Set("Accept-Encoding", "gzip")
 
-	if contentEncoding != "" {
-		req.Header.Set("Content-Encoding", contentEncoding)
+	if body != nil && c.shouldCompressRequest(bodyData) {
+		req.Header.Set("Content-Encoding", "gzip")
 	}
 
 	resp, err := c.httpClient.Do(req)
@@ -135,31 +112,27 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	}
 	defer resp.Body.Close()
 
-	// Читаем и при необходимости распаковываем ответ
-	var respBody []byte
-	if strings.Contains(resp.Header.Get("Content-Encoding"), "gzip") {
-		gz, err := gzip.NewReader(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("creating gzip reader for response failed: %w", err)
-		}
-		defer gz.Close()
+	rawBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("reading response body failed: %w", err)
+	}
 
-		respBody, err = io.ReadAll(gz)
+	var finalBody []byte
+	if isGzipEncoding(resp.Header.Get("Content-Encoding")) {
+		decompressed, err := service.Decompress(rawBody)
 		if err != nil {
-			return nil, fmt.Errorf("reading decompressed response failed: %w", err)
+			return nil, fmt.Errorf("decompressing response body failed: %w", err)
 		}
+		finalBody = decompressed
 	} else {
-		respBody, err = io.ReadAll(resp.Body)
-		if err != nil {
-			return nil, fmt.Errorf("reading response failed: %w", err)
-		}
+		finalBody = rawBody
 	}
 
 	if resp.StatusCode >= 400 {
-		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(respBody))
+		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(finalBody))
 	}
 
-	return respBody, nil
+	return finalBody, nil
 }
 
 func (c *Client) Post(endpoint string, body interface{}) ([]byte, error) {
@@ -168,4 +141,13 @@ func (c *Client) Post(endpoint string, body interface{}) ([]byte, error) {
 
 func (c *Client) Get(endpoint string) ([]byte, error) {
 	return c.doRequest(http.MethodGet, endpoint, nil)
+}
+
+func isGzipEncoding(enc string) bool {
+	for _, part := range strings.Split(enc, ",") {
+		if strings.TrimSpace(strings.ToLower(part)) == "gzip" {
+			return true
+		}
+	}
+	return false
 }
