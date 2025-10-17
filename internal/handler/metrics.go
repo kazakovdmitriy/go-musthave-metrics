@@ -1,11 +1,16 @@
 package handler
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/go-chi/chi"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
+	"go.uber.org/zap"
 )
 
 type MetricsHandler struct {
@@ -57,43 +62,132 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
-	// Дебаг
-	// fmt.Println("data received from endpoint: ", r.URL.Path)
-
 	metricType := chi.URLParam(r, "metricType")
 	metricName := chi.URLParam(r, "metricName")
 	metricValue := chi.URLParam(r, "value")
 
-	switch metricType {
-	case model.Gauge:
-
-		f, err := strconv.ParseFloat(metricValue, 64)
-
-		if writeErrorBadRequests(w, err) {
+	if status, err := h.processMetricUpdate(metricType, metricName, metricValue); err != nil {
+		if status == http.StatusBadRequest {
+			w.WriteHeader(status)
 			return
 		}
-
-		h.service.UpdateGauge(metricName, f)
-	case model.Counter:
-		f, err := strconv.ParseInt(metricValue, 10, 64)
-
-		if writeErrorBadRequests(w, err) {
-			return
-		}
-
-		h.service.UpdateCounter(metricName, f)
-	default:
-		w.WriteHeader(http.StatusBadRequest)
+		w.WriteHeader(status)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 }
 
-func writeErrorBadRequests(w http.ResponseWriter, err error) bool {
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return true
+func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
+
+	contentType := r.Header.Get("Content-Type")
+
+	switch {
+	case strings.Contains(contentType, "application/json"):
+		var data model.Metrics
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusBadRequest)
+			return
+		}
+
+		metricType := strings.ToLower(data.MType)
+		metricName := data.ID
+
+		switch metricType {
+		case model.Gauge:
+			h.service.UpdateGauge(metricName, *data.Value)
+		case model.Counter:
+			h.service.UpdateCounter(metricName, *data.Delta)
+		default:
+			http.Error(w, "unknown metric type", http.StatusBadRequest)
+			return
+		}
+	default:
+		http.Error(w, "Unsupported content type", http.StatusUnsupportedMediaType)
+		return
 	}
-	return false
+
+	w.WriteHeader(http.StatusOK)
 }
+
+func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) {
+	contentType := r.Header.Get("Content-Type")
+
+	switch {
+	case strings.Contains(contentType, "application/json"):
+
+		var data model.Metrics
+		var resp model.Metrics
+
+		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+			http.Error(w, "Invalid JSON", http.StatusNotFound)
+			return
+		}
+
+		switch strings.ToLower(data.MType) {
+		case model.Gauge:
+			value, err := h.service.GetGauge(data.ID)
+			if err != nil {
+				http.Error(w, "Invalid metric value", http.StatusNotFound)
+				return
+			}
+
+			resp = model.Metrics{
+				ID:    data.ID,
+				MType: data.MType,
+				Value: &value,
+			}
+		case strings.ToLower(model.Counter):
+			value, err := h.service.GetCounter(data.ID)
+			if err != nil {
+				http.Error(w, "Invalid metric value", http.StatusNotFound)
+				return
+			}
+			resp = model.Metrics{
+				ID:    data.ID,
+				MType: data.MType,
+				Delta: &value,
+			}
+		}
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+
+		enc := json.NewEncoder(w)
+		if err := enc.Encode(resp); err != nil {
+			logger.Log.Error("error encoding response", zap.Error(err))
+			return
+		}
+	}
+}
+
+func (h *MetricsHandler) processMetricUpdate(metricType, metricName, metricValue string) (int, error) {
+	switch metricType {
+	case model.Gauge:
+		f, err := strconv.ParseFloat(metricValue, 64)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		h.service.UpdateGauge(metricName, f)
+
+	case model.Counter:
+		f, err := strconv.ParseInt(metricValue, 10, 64)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+		h.service.UpdateCounter(metricName, f)
+
+	default:
+		return http.StatusBadRequest, fmt.Errorf("unknown metric type")
+	}
+
+	return http.StatusOK, nil
+}
+
+// func writeErrorBadRequests(w http.ResponseWriter, err error) bool {
+// 	if err != nil {
+// 		http.Error(w, err.Error(), http.StatusBadRequest)
+// 		return true
+// 	}
+// 	return false
+// }

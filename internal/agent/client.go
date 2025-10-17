@@ -58,7 +58,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	for key, value := range c.headers {
 		req.Header.Set(key, value)
 	}
-	req.Header.Set("Content-Type", "text/plain")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

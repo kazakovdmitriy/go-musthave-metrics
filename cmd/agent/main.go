@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"os/signal"
 	"sync"
@@ -11,12 +10,16 @@ import (
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
+	"go.uber.org/zap"
 )
 
 func main() {
 	cfg := config.ParseAgentConfig()
 
-	fmt.Println(cfg)
+	if err := logger.Initialise(cfg.LogLevel); err != nil {
+		panic(err)
+	}
 
 	client := agent.NewClient(cfg.ServerAddr)
 
@@ -38,6 +41,8 @@ func main() {
 	pollTicker := time.NewTicker(polingInterval)
 	defer pollTicker.Stop()
 
+	poolCount := 0
+
 	go func() {
 		for {
 			select {
@@ -48,6 +53,7 @@ func main() {
 				}
 				metricsMutex.Lock()
 				metrics = newMetrics
+				poolCount += 1
 				metricsMutex.Unlock()
 			case <-ctx.Done():
 				return
@@ -68,11 +74,13 @@ func main() {
 			case <-reportTicker.C:
 				metricsMutex.RLock()
 				currentMetrics := metrics
+				deltaCount := poolCount
+				poolCount = 0
 				metricsMutex.RUnlock()
 
-				_, err := agent.SendMetrics(client, currentMetrics)
+				_, err := agent.SendMetrics(client, currentMetrics, int64(deltaCount))
 				if err != nil {
-					fmt.Println("error from server: ", err)
+					logger.Log.Error("error from server", zap.Error(err))
 				}
 			case <-ctx.Done():
 				return
@@ -81,12 +89,12 @@ func main() {
 	}()
 
 	<-sigChan
-	fmt.Println("\nReceived interrupt signal. Shutting down gracefully...")
+	logger.Log.Info("received interrupt signal. shutting down gracefully...")
 
 	cancel()
 	pollTicker.Stop()
 	reportTicker.Stop()
 
 	wg.Wait()
-	fmt.Println("agent shutdown completed")
+	logger.Log.Info("agent shutdown completed")
 }

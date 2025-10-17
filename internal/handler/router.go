@@ -51,11 +51,15 @@ func setupMetricsRoutes(r chi.Router, metricsHandler *MetricsHandler) {
 		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
 			r.Post("/{value}", metricsHandler.UpdateMetric)
 		})
+
+		r.Post("/", metricsHandler.UpdatePost)
 	})
 
 	r.Route("/value", func(r chi.Router) {
 		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
 			r.Get("/", metricsHandler.GetMetric)
 		})
+
+		r.Post("/", metricsHandler.SentMetricPost)
 	})
 }
