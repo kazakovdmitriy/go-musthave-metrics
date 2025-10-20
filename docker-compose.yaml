@@ -1,0 +1,19 @@
+
+services:
+  postgres:
+    image: postgres:17
+    container_name: my_postgres_db
+    environment:
+      POSTGRES_DB: praktikum
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      # Опционально: монтирование файла инициализации
+      # - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
