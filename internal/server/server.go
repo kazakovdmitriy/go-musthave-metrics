@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -11,7 +12,7 @@ import (
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/memstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
 )
@@ -24,7 +25,7 @@ type Server struct {
 }
 
 func NewApp(cfg *config.ServerFlags, log *zap.Logger) (*Server, error) {
-	storage := repository.NewMemStorage(cfg, log)
+	storage := memstorage.NewMemStorage(cfg, log)
 	app := &Server{
 		cfg:     cfg,
 		log:     log,
@@ -37,12 +38,19 @@ func (a *Server) Run() error {
 	var activeRequests sync.WaitGroup
 	shutdownCh := make(chan struct{})
 
-	handler := handler.SetupHandler(
+	ctx := context.Background()
+
+	handler, err := handler.SetupHandler(
+		ctx,
 		a.storage,
 		&activeRequests,
 		a.log,
 		shutdownCh,
+		*a.cfg,
 	)
+	if err != nil {
+		return fmt.Errorf("%w", err)
+	}
 
 	a.server = &http.Server{
 		Addr:    a.cfg.ServerAddr,
@@ -56,7 +64,13 @@ func (a *Server) Run() error {
 		}
 	}()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	ctx, stop := signal.NotifyContext(
+		ctx,
+		os.Interrupt,
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	)
 	defer stop()
 
 	<-ctx.Done()
