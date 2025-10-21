@@ -53,7 +53,7 @@ func (db *Database) IsConnected() bool {
 		return false
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	return db.Pool.Ping(ctx) == nil

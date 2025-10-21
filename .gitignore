@@ -27,5 +27,5 @@ vendor/
 metricstest
 run_test.zsh
 coverage.html
-metrics.jsondocker-compose.yaml
+metrics.json
 docker-compose.yaml

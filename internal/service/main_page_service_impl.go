@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"fmt"
 )
 
@@ -14,8 +15,8 @@ func NewMainPageService(storage Storage) *mainPageService {
 	}
 }
 
-func (s *mainPageService) GetMainPage() (string, error) {
-	metricsResult, err := s.storage.GetAllMetrics()
+func (s *mainPageService) GetMainPage(ctx context.Context) (string, error) {
+	metricsResult, err := s.storage.GetAllMetrics(ctx)
 	if err != nil {
 		return "", err
 	}

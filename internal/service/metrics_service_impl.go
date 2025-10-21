@@ -1,6 +1,7 @@
 package service
 
 import (
+	"context"
 	"errors"
 )
 
@@ -14,18 +15,18 @@ func NewMetricService(storage Storage) *metricsService {
 	}
 }
 
-func (s *metricsService) UpdateGauge(name string, value float64) error {
-	s.storage.UpdateGauge(name, value)
+func (s *metricsService) UpdateGauge(ctx context.Context, name string, value float64) error {
+	s.storage.UpdateGauge(ctx, name, value)
 	return nil
 }
 
-func (s *metricsService) UpdateCounter(name string, value int64) error {
-	s.storage.UpdateCounter(name, value)
+func (s *metricsService) UpdateCounter(ctx context.Context, name string, value int64) error {
+	s.storage.UpdateCounter(ctx, name, value)
 	return nil
 }
 
-func (s *metricsService) GetGauge(name string) (float64, error) {
-	value, exist := s.storage.GetGauge(name)
+func (s *metricsService) GetGauge(ctx context.Context, name string) (float64, error) {
+	value, exist := s.storage.GetGauge(ctx, name)
 	if !exist {
 		return 0, errors.New("gauge metric not found")
 	}
@@ -33,8 +34,8 @@ func (s *metricsService) GetGauge(name string) (float64, error) {
 	return value, nil
 }
 
-func (s *metricsService) GetCounter(name string) (int64, error) {
-	value, exist := s.storage.GetCounter(name)
+func (s *metricsService) GetCounter(ctx context.Context, name string) (int64, error) {
+	value, exist := s.storage.GetCounter(ctx, name)
 	if !exist {
 		return 0, errors.New("counter metric not found")
 	}

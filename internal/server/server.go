@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config/db"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/dbstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/memstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
@@ -25,31 +27,32 @@ type Server struct {
 }
 
 func NewApp(cfg *config.ServerFlags, log *zap.Logger) (*Server, error) {
-	storage := memstorage.NewMemStorage(cfg, log)
+	// storage := memstorage.NewMemStorage(cfg, log)
 	app := &Server{
-		cfg:     cfg,
-		log:     log,
-		storage: storage,
+		cfg: cfg,
+		log: log,
 	}
 	return app, nil
 }
 
 func (a *Server) Run() error {
-	var activeRequests sync.WaitGroup
-	shutdownCh := make(chan struct{})
 
 	ctx := context.Background()
 
+	var activeRequests sync.WaitGroup
+	shutdownCh := make(chan struct{})
+
+	storage := a.storageInitializer(ctx)
+
 	handler, err := handler.SetupHandler(
-		ctx,
-		a.storage,
+		storage,
 		&activeRequests,
 		a.log,
 		shutdownCh,
 		*a.cfg,
 	)
 	if err != nil {
-		return fmt.Errorf("%w", err)
+		return fmt.Errorf("handler initialization error: %w", err)
 	}
 
 	a.server = &http.Server{
@@ -107,4 +110,27 @@ func (a *Server) Close() {
 	if a.storage != nil {
 		a.storage.Close()
 	}
+}
+
+func (a *Server) storageInitializer(ctx context.Context) *service.Storage {
+	var storage service.Storage
+
+	if a.cfg.DatabaseDSN != "" {
+		dbase, err := db.NewDatabase(ctx, a.cfg.DatabaseDSN)
+		if err != nil && dbase.IsConnected() {
+			a.log.Warn("Failed to connect to DB, failing back to in-memory storage", zap.Error(err))
+			storage = memstorage.NewMemStorage(a.cfg, a.log)
+		} else {
+			migrator := db.NewMigrator(a.cfg.DatabaseDSN, "migrations", a.log)
+			if err := migrator.Up(); err != nil {
+				a.log.Error("migration failed", zap.Error(err))
+			}
+			storage = dbstorage.NewDBStorage(dbase.Pool, a.log)
+		}
+	} else {
+		a.log.Info("No database DSN provided, using in-memory storage")
+		storage = memstorage.NewMemStorage(a.cfg, a.log)
+	}
+
+	return &storage
 }

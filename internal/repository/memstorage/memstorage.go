@@ -1,6 +1,7 @@
 package memstorage
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -51,13 +52,13 @@ func NewMemStorage(cfg *config.ServerFlags, log *zap.Logger) service.Storage {
 	return storage
 }
 
-func (m *memStorage) UpdateGauge(name string, value float64) {
+func (m *memStorage) UpdateGauge(ctx context.Context, name string, value float64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.gauges[name] = value
 }
 
-func (m *memStorage) UpdateCounter(name string, value int64) {
+func (m *memStorage) UpdateCounter(ctx context.Context, name string, value int64) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing, exists := m.counters[name]; exists {
@@ -68,7 +69,7 @@ func (m *memStorage) UpdateCounter(name string, value int64) {
 	}
 }
 
-func (m *memStorage) GetGauge(name string) (float64, bool) {
+func (m *memStorage) GetGauge(ctx context.Context, name string) (float64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if metric, exists := m.gauges[name]; exists {
@@ -77,7 +78,7 @@ func (m *memStorage) GetGauge(name string) (float64, bool) {
 	return 0, false
 }
 
-func (m *memStorage) GetCounter(name string) (int64, bool) {
+func (m *memStorage) GetCounter(ctx context.Context, name string) (int64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if metric, exists := m.counters[name]; exists {
@@ -86,7 +87,7 @@ func (m *memStorage) GetCounter(name string) (int64, bool) {
 	return 0, false
 }
 
-func (m *memStorage) GetAllMetrics() (string, error) {
+func (m *memStorage) GetAllMetrics(ctx context.Context) (string, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
@@ -104,7 +105,7 @@ func (m *memStorage) GetAllMetrics() (string, error) {
 
 	result += "</ul>\n"
 
-	if result != "<ul>\n</ul>\n" { // Проверяем, есть ли данные
+	if result != "<ul>\n</ul>\n" {
 		return result, nil
 	}
 

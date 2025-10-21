@@ -15,7 +15,7 @@ func NewMainPageHandler(service MainPageService) *MainPageHandler {
 }
 
 func (h *MainPageHandler) GetMainPage(w http.ResponseWriter, r *http.Request) {
-	mainPage, err := h.service.GetMainPage()
+	mainPage, err := h.service.GetMainPage(r.Context())
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 
