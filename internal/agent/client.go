@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
+	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
 	"go.uber.org/zap"
 )
 
@@ -81,7 +81,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 		bodyData = jsonData
 
 		if c.shouldCompressRequest(bodyData) {
-			compressed, err := compressor_service.Compress(bodyData, c.CompressionLevel)
+			compressed, err := compressorservice.Compress(bodyData, c.CompressionLevel)
 			if err != nil {
 				return nil, fmt.Errorf("compressing request body failed: %w", err)
 			}
@@ -119,7 +119,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 
 	var finalBody []byte
 	if isGzipEncoding(resp.Header.Get("Content-Encoding")) {
-		decompressed, err := compressor_service.Decompress(rawBody)
+		decompressed, err := compressorservice.Decompress(rawBody)
 		if err != nil {
 			return nil, fmt.Errorf("decompressing response body failed: %w", err)
 		}

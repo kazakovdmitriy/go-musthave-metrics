@@ -1,4 +1,4 @@
-package main_page_service
+package mainpageservice
 
 import (
 	"context"
