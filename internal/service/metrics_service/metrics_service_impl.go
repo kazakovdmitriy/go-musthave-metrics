@@ -1,15 +1,17 @@
-package service
+package metrics_service
 
 import (
 	"context"
 	"errors"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 type metricsService struct {
-	storage Storage
+	storage service.Storage
 }
 
-func NewMetricService(storage Storage) *metricsService {
+func NewMetricService(storage service.Storage) *metricsService {
 	return &metricsService{
 		storage: storage,
 	}

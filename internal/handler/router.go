@@ -13,6 +13,8 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/compressor"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/main_page_service"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/metrics_service"
 	"go.uber.org/zap"
 )
 
@@ -76,7 +78,7 @@ func setupPingRoutes(r chi.Router, pingHandler *ping.PingHandler) {
 
 // MainPage
 func newMainPageService(memStorage service.Storage) *mainpage.MainPageHandler {
-	mainPageService := service.NewMainPageService(memStorage)
+	mainPageService := main_page_service.NewMainPageService(memStorage)
 	return mainpage.NewMainPageHandler(mainPageService)
 }
 
@@ -88,7 +90,7 @@ func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {
 
 // Metric
 func newMetricsHandler(memStorage service.Storage, log *zap.Logger) *metrics.MetricsHandler {
-	metricsServer := service.NewMetricService(memStorage)
+	metricsServer := metrics_service.NewMetricService(memStorage)
 	return metrics.NewMetricsHandler(metricsServer, log)
 }
 

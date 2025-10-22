@@ -1,4 +1,4 @@
-package service
+package metrics_service
 
 import (
 	"context"

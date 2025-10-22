@@ -1,4 +1,4 @@
-package service
+package compressor_service
 
 import (
 	"bytes"
