@@ -1,10 +1,12 @@
 package service
 
+import "context"
+
 type Storage interface {
-	UpdateGauge(name string, value float64)
-	UpdateCounter(name string, value int64)
-	GetGauge(name string) (float64, bool)
-	GetCounter(name string) (int64, bool)
-	GetAllMetrics() (string, error)
+	UpdateGauge(ctx context.Context, name string, value float64)
+	UpdateCounter(ctx context.Context, name string, value int64)
+	GetGauge(ctx context.Context, name string) (float64, bool)
+	GetCounter(ctx context.Context, name string) (int64, bool)
+	GetAllMetrics(ctx context.Context) (string, error)
 	Close() error
 }

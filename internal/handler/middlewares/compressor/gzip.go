@@ -6,17 +6,17 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
+	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
 )
 
 // HTTPGzipAdapter — адаптер для HTTP
 type HTTPGzipAdapter struct {
-	stream *service.StreamCompressor
+	stream *compressorservice.StreamCompressor
 }
 
 func NewHTTPGzipAdapter() *HTTPGzipAdapter {
 	return &HTTPGzipAdapter{
-		stream: service.NewStreamCompressor(),
+		stream: compressorservice.NewStreamCompressor(),
 	}
 }
 

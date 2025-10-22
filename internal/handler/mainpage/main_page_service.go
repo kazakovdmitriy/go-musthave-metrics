@@ -1,5 +1,7 @@
 package mainpage
 
+import "context"
+
 type MainPageService interface {
-	GetMainPage() (string, error)
+	GetMainPage(ctx context.Context) (string, error)
 }

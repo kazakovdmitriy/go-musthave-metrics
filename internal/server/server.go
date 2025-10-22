@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"os/signal"
@@ -10,8 +11,10 @@ import (
 	"time"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config/db"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/dbstorage"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/memstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
 )
@@ -24,25 +27,33 @@ type Server struct {
 }
 
 func NewApp(cfg *config.ServerFlags, log *zap.Logger) (*Server, error) {
-	storage := repository.NewMemStorage(cfg, log)
+	// storage := memstorage.NewMemStorage(cfg, log)
 	app := &Server{
-		cfg:     cfg,
-		log:     log,
-		storage: storage,
+		cfg: cfg,
+		log: log,
 	}
 	return app, nil
 }
 
 func (a *Server) Run() error {
+
+	ctx := context.Background()
+
 	var activeRequests sync.WaitGroup
 	shutdownCh := make(chan struct{})
 
-	handler := handler.SetupHandler(
-		a.storage,
+	storage := a.storageInitializer(ctx)
+
+	handler, err := handler.SetupHandler(
+		storage,
 		&activeRequests,
 		a.log,
 		shutdownCh,
+		*a.cfg,
 	)
+	if err != nil {
+		return fmt.Errorf("handler initialization error: %w", err)
+	}
 
 	a.server = &http.Server{
 		Addr:    a.cfg.ServerAddr,
@@ -56,7 +67,13 @@ func (a *Server) Run() error {
 		}
 	}()
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM, syscall.SIGINT, syscall.SIGQUIT)
+	ctx, stop := signal.NotifyContext(
+		ctx,
+		os.Interrupt,
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	)
 	defer stop()
 
 	<-ctx.Done()
@@ -93,4 +110,27 @@ func (a *Server) Close() {
 	if a.storage != nil {
 		a.storage.Close()
 	}
+}
+
+func (a *Server) storageInitializer(ctx context.Context) *service.Storage {
+	var storage service.Storage
+
+	if a.cfg.DatabaseDSN != "" {
+		dbase, err := db.NewDatabase(ctx, a.cfg.DatabaseDSN)
+		if err != nil && dbase.IsConnected() {
+			a.log.Warn("Failed to connect to DB, failing back to in-memory storage", zap.Error(err))
+			storage = memstorage.NewMemStorage(a.cfg, a.log)
+		} else {
+			migrator := db.NewMigrator(a.cfg.DatabaseDSN, "migrations", a.log)
+			if err := migrator.Up(); err != nil {
+				a.log.Error("migration failed", zap.Error(err))
+			}
+			storage = dbstorage.NewDBStorage(dbase.Pool, a.log)
+		}
+	} else {
+		a.log.Info("No database DSN provided, using in-memory storage")
+		storage = memstorage.NewMemStorage(a.cfg, a.log)
+	}
+
+	return &storage
 }

@@ -1,6 +1,7 @@
 package metrics
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
@@ -33,9 +34,9 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 
 	switch metricType {
 	case model.Gauge:
-		value, err = h.service.GetGauge(metricName)
+		value, err = h.service.GetGauge(r.Context(), metricName)
 	case model.Counter:
-		value, err = h.service.GetCounter(metricName)
+		value, err = h.service.GetCounter(r.Context(), metricName)
 	default:
 		h.log.Error("invalid metric type",
 			zap.String("metric_type", metricType),
@@ -78,7 +79,7 @@ func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	metricName := chi.URLParam(r, "metricName")
 	metricValue := chi.URLParam(r, "value")
 
-	if status, err := h.processMetricUpdate(metricType, metricName, metricValue); err != nil {
+	if status, err := h.processMetricUpdate(r.Context(), metricType, metricName, metricValue); err != nil {
 		h.log.Error("error processing metric update",
 			zap.String("metric_type", metricType),
 			zap.String("metric_name", metricName),
@@ -115,7 +116,7 @@ func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "metric value is required", http.StatusBadRequest)
 				return
 			}
-			h.service.UpdateGauge(metricName, *data.Value)
+			h.service.UpdateGauge(r.Context(), metricName, *data.Value)
 		case model.Counter:
 			if data.Delta == nil {
 				h.log.Error("counter metric delta is nil",
@@ -123,7 +124,7 @@ func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 				http.Error(w, "metric delta is required", http.StatusBadRequest)
 				return
 			}
-			h.service.UpdateCounter(metricName, *data.Delta)
+			h.service.UpdateCounter(r.Context(), metricName, *data.Delta)
 		default:
 			h.log.Error("unknown metric type in JSON",
 				zap.String("metric_type", data.MType),
@@ -156,7 +157,7 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 
 		switch strings.ToLower(data.MType) {
 		case model.Gauge:
-			value, err := h.service.GetGauge(data.ID)
+			value, err := h.service.GetGauge(r.Context(), data.ID)
 			if err != nil {
 				h.log.Error("error getting gauge metric",
 					zap.String("metric_name", data.ID),
@@ -171,7 +172,7 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 				Value: &value,
 			}
 		case strings.ToLower(model.Counter):
-			value, err := h.service.GetCounter(data.ID)
+			value, err := h.service.GetCounter(r.Context(), data.ID)
 			if err != nil {
 				h.log.Error("error getting counter metric",
 					zap.String("metric_name", data.ID),
@@ -207,7 +208,7 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 	}
 }
 
-func (h *MetricsHandler) processMetricUpdate(metricType, metricName, metricValue string) (int, error) {
+func (h *MetricsHandler) processMetricUpdate(ctx context.Context, metricType, metricName, metricValue string) (int, error) {
 	switch metricType {
 	case model.Gauge:
 		f, err := strconv.ParseFloat(metricValue, 64)
@@ -218,7 +219,7 @@ func (h *MetricsHandler) processMetricUpdate(metricType, metricName, metricValue
 				zap.Error(err))
 			return http.StatusBadRequest, err
 		}
-		h.service.UpdateGauge(metricName, f)
+		h.service.UpdateGauge(ctx, metricName, f)
 
 	case model.Counter:
 		f, err := strconv.ParseInt(metricValue, 10, 64)
@@ -229,7 +230,7 @@ func (h *MetricsHandler) processMetricUpdate(metricType, metricName, metricValue
 				zap.Error(err))
 			return http.StatusBadRequest, err
 		}
-		h.service.UpdateCounter(metricName, f)
+		h.service.UpdateCounter(ctx, metricName, f)
 
 	default:
 		h.log.Error("unknown metric type in update",

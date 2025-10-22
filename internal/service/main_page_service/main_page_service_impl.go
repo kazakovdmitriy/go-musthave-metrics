@@ -1,21 +1,24 @@
-package service
+package mainpageservice
 
 import (
+	"context"
 	"fmt"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 type mainPageService struct {
-	storage Storage
+	storage service.Storage
 }
 
-func NewMainPageService(storage Storage) *mainPageService {
+func NewMainPageService(storage service.Storage) *mainPageService {
 	return &mainPageService{
 		storage: storage,
 	}
 }
 
-func (s *mainPageService) GetMainPage() (string, error) {
-	metricsResult, err := s.storage.GetAllMetrics()
+func (s *mainPageService) GetMainPage(ctx context.Context) (string, error) {
+	metricsResult, err := s.storage.GetAllMetrics(ctx)
 	if err != nil {
 		return "", err
 	}
