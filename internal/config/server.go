@@ -34,7 +34,6 @@ func setDefaultServerFlag(cfg *ServerFlags) {
 	cfg.StoreInterval = 300
 	cfg.FileStoragePath = "metrics.json"
 	cfg.Restore = false
-	cfg.DatabaseDSN = "postgres://postgres:postgres@localhost:5432/praktikum?sslmode=disable"
 }
 
 func parseServerEnv(cfg *ServerFlags) {
@@ -52,7 +51,7 @@ func parseServerFlag(cfg *ServerFlags) {
 	flags.IntVarP(&cfg.StoreInterval, "strIntrvl", "i", 300, "Disc save interval, s")
 	flags.StringVarP(&cfg.FileStoragePath, "filePath", "f", "metrics.json", "Path to file to save metrics")
 	flags.BoolVarP(&cfg.Restore, "restore", "r", false, "Load metrics on start")
-	flags.StringVarP(&cfg.DatabaseDSN, "database_dsn", "d", "postgres://postgres:postgres@localhost:5432/praktikum?sslmode=disable", "DSN string for db connection")
+	flags.StringVarP(&cfg.DatabaseDSN, "database_dsn", "d", "", "DSN string for db connection")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		log.Printf("Error parsing command-line flags: %v", err)
