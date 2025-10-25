@@ -162,7 +162,7 @@ func TestNewMainPageHandler(t *testing.T) {
 	handler := NewMainPageHandler(mockService)
 
 	if handler == nil {
-		t.Error("expected handler to be created, got nil")
+		t.Fatal("expected handler to be created, got nil")
 	}
 
 	if handler.service != mockService {
@@ -170,7 +170,6 @@ func TestNewMainPageHandler(t *testing.T) {
 	}
 }
 
-// Исправленный тест для разных HTTP методов
 func TestMainPageHandler_DifferentMethods(t *testing.T) {
 	methods := []string{"GET", "POST", "PUT", "DELETE", "PATCH"}
 
