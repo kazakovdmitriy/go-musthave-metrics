@@ -14,36 +14,50 @@ func SendMetrics(
 
 	metricsMap := metrics.ToMap()
 
-	for name, value := range metricsMap {
-		body := model.Metrics{
-			ID:    name,
-			MType: "gauge",
-			Value: &value,
-		}
-		_, err := client.Post("/update", body)
-		if err != nil {
-			log.Error(
-				"failed to send metric",
-				zap.String("metric", name),
-				zap.Float64("value", value),
-			)
-			return nil, err
-		}
+	if len(metricsMap) == 0 && deltaCounter == 0 {
+		log.Info("no metrics to send")
+		return nil, nil
 	}
 
-	counterBody := model.Metrics{
-		ID:    "PollCount",
-		MType: "counter",
-		Delta: &deltaCounter,
+	var batch []model.Metrics
+
+	for name, value := range metricsMap {
+		valueCopy := value
+		batch = append(batch, model.Metrics{
+			ID:    name,
+			MType: model.Gauge,
+			Value: &valueCopy,
+		})
 	}
-	_, err := client.Post("/update", counterBody)
+
+	if deltaCounter != 0 {
+		deltaCopy := deltaCounter
+		batch = append(batch, model.Metrics{
+			ID:    "PollCount",
+			MType: model.Counter,
+			Delta: &deltaCopy,
+		})
+	}
+
+	if len(batch) == 0 {
+		log.Info("no metrics to send after filtering")
+		return nil, nil
+	}
+
+	response, err := client.Post("/updates/", batch)
 	if err != nil {
 		log.Error(
-			"failed to send counter",
-			zap.String("metric", counterBody.ID),
-			zap.Int64("value", deltaCounter),
+			"failed to send metrics batch",
+			zap.Int("metrics_count", len(batch)),
+			zap.Error(err),
 		)
 		return nil, err
 	}
-	return nil, nil
+
+	log.Debug(
+		"successfully sent metrics batch",
+		zap.Int("metrics_count", len(batch)),
+	)
+
+	return response, nil
 }
