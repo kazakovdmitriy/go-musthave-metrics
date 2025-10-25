@@ -13,8 +13,8 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/compressor"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
-	mainpageservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/main_page_service"
-	metricsservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/metrics_service"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/mainpageservice"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/metricsservice"
 	"go.uber.org/zap"
 )
 
@@ -89,9 +89,9 @@ func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {
 }
 
 // Metric
-func newMetricsHandler(memStorage service.Storage, log *zap.Logger) *metrics.MetricsHandler {
-	metricsServer := metricsservice.NewMetricService(memStorage)
-	return metrics.NewMetricsHandler(metricsServer, log)
+func newMetricsHandler(storage service.Storage, log *zap.Logger) *metrics.MetricsHandler {
+	metricsService := metricsservice.NewMetricService(storage)
+	return metrics.NewMetricsHandler(metricsService, log)
 }
 
 func setupMetricsRoutes(r chi.Router, metricsHandler *metrics.MetricsHandler) {
@@ -101,6 +101,10 @@ func setupMetricsRoutes(r chi.Router, metricsHandler *metrics.MetricsHandler) {
 		})
 
 		r.Post("/", metricsHandler.UpdatePost)
+	})
+
+	r.Route("/updates", func(r chi.Router) {
+		r.Post("/", metricsHandler.UpdateMetrics)
 	})
 
 	r.Route("/value", func(r chi.Router) {

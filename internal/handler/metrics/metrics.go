@@ -9,8 +9,9 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"go.uber.org/zap"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 )
 
 type MetricsHandler struct {
@@ -29,64 +30,53 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "metricType")
 	metricName := chi.URLParam(r, "metricName")
 
-	var value interface{}
-	var err error
+	if !isValidMetricType(metricType) {
+		h.logAndWriteError(
+			w,
+			fmt.Errorf("invalid metric type: %s", metricType),
+			http.StatusBadRequest,
+			"invalid metric type",
+			zap.String("metric_type", metricType),
+			zap.String("metric_name", metricName),
+		)
+		return
+	}
+
+	var valueStr string
 
 	switch metricType {
 	case model.Gauge:
-		value, err = h.service.GetGauge(r.Context(), metricName)
+		gaugeValue, err := h.service.GetGauge(r.Context(), metricName)
+		if err != nil {
+			h.logAndWriteError(w, err, http.StatusNotFound, "error getting gauge metric",
+				zap.String("metric_type", metricType), zap.String("metric_name", metricName))
+			return
+		}
+		valueStr = strconv.FormatFloat(gaugeValue, 'f', -1, 64)
+
 	case model.Counter:
-		value, err = h.service.GetCounter(r.Context(), metricName)
-	default:
-		h.log.Error("invalid metric type",
-			zap.String("metric_type", metricType),
-			zap.String("metric_name", metricName))
-		w.WriteHeader(http.StatusBadRequest)
-		return
-	}
-
-	if err != nil {
-		h.log.Error("error getting metric",
-			zap.String("metric_type", metricType),
-			zap.String("metric_name", metricName),
-			zap.Error(err))
-		w.WriteHeader(http.StatusNotFound)
-		return
-	}
-
-	var strValue string
-	switch v := value.(type) {
-	case float64:
-		strValue = strconv.FormatFloat(v, 'f', -1, 64)
-	case int64:
-		strValue = strconv.FormatInt(v, 10)
-	default:
-		h.log.Error("unexpected metric value type",
-			zap.String("metric_type", metricType),
-			zap.String("metric_name", metricName),
-			zap.String("value_type", fmt.Sprintf("%T", v)))
-		w.WriteHeader(http.StatusInternalServerError)
-		return
+		counterValue, err := h.service.GetCounter(r.Context(), metricName)
+		if err != nil {
+			h.logAndWriteError(w, err, http.StatusNotFound, "error getting counter metric",
+				zap.String("metric_type", metricType), zap.String("metric_name", metricName))
+			return
+		}
+		valueStr = strconv.FormatInt(counterValue, 10)
 	}
 
 	w.Header().Set("Content-Type", "text/plain")
 	w.WriteHeader(http.StatusOK)
-	w.Write([]byte(strValue))
+	w.Write([]byte(valueStr))
 }
 
 func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "metricType")
 	metricName := chi.URLParam(r, "metricName")
-	metricValue := chi.URLParam(r, "value")
+	metricValueStr := chi.URLParam(r, "value")
 
-	if status, err := h.processMetricUpdate(r.Context(), metricType, metricName, metricValue); err != nil {
-		h.log.Error("error processing metric update",
-			zap.String("metric_type", metricType),
-			zap.String("metric_name", metricName),
-			zap.String("metric_value", metricValue),
-			zap.Int("status_code", status),
-			zap.Error(err))
-		w.WriteHeader(status)
+	err := h.updateMetricByType(w, r.Context(), metricType, metricName, metricValueStr)
+	if err != nil {
+		// updateMetricByType уже логирует ошибки и вызывает http.Error.
 		return
 	}
 
@@ -94,47 +84,51 @@ func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
-	contentType := r.Header.Get("Content-Type")
+	if r.Header.Get("Content-Type") != "application/json" {
+		h.logAndWriteError(
+			w,
+			fmt.Errorf("unsupported content type"),
+			http.StatusUnsupportedMediaType,
+			"unsupported content type",
+			zap.String("content_type", r.Header.Get("Content-Type")),
+		)
+		return
+	}
 
-	switch {
-	case strings.Contains(contentType, "application/json"):
-		var data model.Metrics
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			h.log.Error("invalid JSON in request", zap.Error(err))
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
-			return
-		}
+	var data model.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		h.logAndWriteError(w, err, http.StatusBadRequest, "invalid JSON in request", zap.Error(err))
+		return
+	}
 
-		metricType := strings.ToLower(data.MType)
-		metricName := data.ID
+	if err := h.updateMetricFromJSON(w, r.Context(), data); err != nil {
+		// updateMetricFromJSON уже логирует ошибки и вызывает http.Error.
+		return
+	}
 
-		switch metricType {
-		case model.Gauge:
-			if data.Value == nil {
-				h.log.Error("gauge metric value is nil",
-					zap.String("metric_name", metricName))
-				http.Error(w, "metric value is required", http.StatusBadRequest)
-				return
-			}
-			h.service.UpdateGauge(r.Context(), metricName, *data.Value)
-		case model.Counter:
-			if data.Delta == nil {
-				h.log.Error("counter metric delta is nil",
-					zap.String("metric_name", metricName))
-				http.Error(w, "metric delta is required", http.StatusBadRequest)
-				return
-			}
-			h.service.UpdateCounter(r.Context(), metricName, *data.Delta)
-		default:
-			h.log.Error("unknown metric type in JSON",
-				zap.String("metric_type", data.MType),
-				zap.String("metric_name", data.ID))
-			http.Error(w, "unknown metric type", http.StatusBadRequest)
-			return
-		}
-	default:
-		h.log.Error("unsupported content type", zap.String("content_type", contentType))
-		http.Error(w, "Unsupported content type", http.StatusUnsupportedMediaType)
+	w.WriteHeader(http.StatusOK)
+}
+
+func (h *MetricsHandler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
+	if r.Header.Get("Content-Type") != "application/json" {
+		h.logAndWriteError(
+			w,
+			fmt.Errorf("unsupported content type"),
+			http.StatusUnsupportedMediaType,
+			"unsupported content type",
+			zap.String("content_type", r.Header.Get("Content-Type")),
+		)
+		return
+	}
+
+	var data []model.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		h.logAndWriteError(w, err, http.StatusBadRequest, "invalid JSON in request", zap.Error(err))
+		return
+	}
+
+	if err := h.service.UpdateMetrics(r.Context(), data); err != nil {
+		h.logAndWriteError(w, err, http.StatusInternalServerError, "failed to save batch of metrics", zap.Error(err))
 		return
 	}
 
@@ -142,102 +136,224 @@ func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) {
-	contentType := r.Header.Get("Content-Type")
-
-	switch {
-	case strings.Contains(contentType, "application/json"):
-		var data model.Metrics
-		var resp model.Metrics
-
-		if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
-			h.log.Error("invalid JSON in request", zap.Error(err))
-			http.Error(w, "Invalid JSON", http.StatusBadRequest)
-			return
-		}
-
-		switch strings.ToLower(data.MType) {
-		case model.Gauge:
-			value, err := h.service.GetGauge(r.Context(), data.ID)
-			if err != nil {
-				h.log.Error("error getting gauge metric",
-					zap.String("metric_name", data.ID),
-					zap.Error(err))
-				http.Error(w, "Invalid metric value", http.StatusNotFound)
-				return
-			}
-
-			resp = model.Metrics{
-				ID:    data.ID,
-				MType: data.MType,
-				Value: &value,
-			}
-		case strings.ToLower(model.Counter):
-			value, err := h.service.GetCounter(r.Context(), data.ID)
-			if err != nil {
-				h.log.Error("error getting counter metric",
-					zap.String("metric_name", data.ID),
-					zap.Error(err))
-				http.Error(w, "Invalid metric value", http.StatusNotFound)
-				return
-			}
-			resp = model.Metrics{
-				ID:    data.ID,
-				MType: data.MType,
-				Delta: &value,
-			}
-		default:
-			h.log.Error("unknown metric type in request",
-				zap.String("metric_type", data.MType))
-			http.Error(w, "unknown metric type", http.StatusBadRequest)
-			return
-		}
-
-		w.Header().Set("Content-Type", "application/json")
-		w.WriteHeader(http.StatusOK)
-
-		enc := json.NewEncoder(w)
-		if err := enc.Encode(resp); err != nil {
-			h.log.Error("error encoding response", zap.Error(err))
-			http.Error(w, "Internal server error", http.StatusInternalServerError)
-			return
-		}
-	default:
-		h.log.Error("unsupported content type", zap.String("content_type", contentType))
-		http.Error(w, "Unsupported content type", http.StatusUnsupportedMediaType)
+	if r.Header.Get("Content-Type") != "application/json" {
+		h.logAndWriteError(
+			w,
+			fmt.Errorf("unsupported content type"),
+			http.StatusUnsupportedMediaType,
+			"unsupported content type",
+			zap.String("content_type", r.Header.Get("Content-Type")),
+		)
 		return
+	}
+
+	var data model.Metrics
+	if err := json.NewDecoder(r.Body).Decode(&data); err != nil {
+		h.logAndWriteError(w, err, http.StatusBadRequest, "invalid JSON in request", zap.Error(err))
+		return
+	}
+
+	resp, err := h.getMetricForJSONResponse(w, r.Context(), data)
+	if err != nil {
+		// getMetricForJSONResponse уже логирует ошибки и вызывает http.Error.
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		h.logAndWriteError(w, err, http.StatusInternalServerError, "error encoding response", zap.Error(err))
 	}
 }
 
-func (h *MetricsHandler) processMetricUpdate(ctx context.Context, metricType, metricName, metricValue string) (int, error) {
+// --- Helper functions ---
+
+func isValidMetricType(metricType string) bool {
+	return metricType == model.Gauge || metricType == model.Counter
+}
+
+func (h *MetricsHandler) updateMetricByType(
+	w http.ResponseWriter,
+	ctx context.Context,
+	metricType,
+	metricName,
+	metricValueStr string,
+) error {
+	var err error
 	switch metricType {
 	case model.Gauge:
-		f, err := strconv.ParseFloat(metricValue, 64)
-		if err != nil {
+		parsedValue, parseErr := strconv.ParseFloat(metricValueStr, 64)
+		if parseErr != nil {
+			err = parseErr
 			h.log.Error("invalid gauge value format",
 				zap.String("metric_name", metricName),
-				zap.String("metric_value", metricValue),
+				zap.String("metric_value", metricValueStr),
 				zap.Error(err))
-			return http.StatusBadRequest, err
+			http.Error(w, "invalid gauge value format", http.StatusBadRequest)
+			return err
 		}
-		h.service.UpdateGauge(ctx, metricName, f)
+		err = h.service.UpdateGauge(ctx, metricName, parsedValue)
+		if err != nil {
+			h.log.Error("error updating gauge metric",
+				zap.String("metric_name", metricName),
+				zap.Float64("metric_value", parsedValue),
+				zap.Error(err))
+			http.Error(w, "failed to update gauge metric", http.StatusInternalServerError)
+			return err
+		}
 
 	case model.Counter:
-		f, err := strconv.ParseInt(metricValue, 10, 64)
-		if err != nil {
+		parsedValue, parseErr := strconv.ParseInt(metricValueStr, 10, 64)
+		if parseErr != nil {
+			err = parseErr
 			h.log.Error("invalid counter value format",
 				zap.String("metric_name", metricName),
-				zap.String("metric_value", metricValue),
+				zap.String("metric_value", metricValueStr),
 				zap.Error(err))
-			return http.StatusBadRequest, err
+			http.Error(w, "invalid counter value format", http.StatusBadRequest)
+			return err
 		}
-		h.service.UpdateCounter(ctx, metricName, f)
+		err = h.service.UpdateCounter(ctx, metricName, parsedValue)
+		if err != nil {
+			h.log.Error("error updating counter metric",
+				zap.String("metric_name", metricName),
+				zap.Int64("metric_value", parsedValue),
+				zap.Error(err))
+			http.Error(w, "failed to update counter metric", http.StatusInternalServerError)
+			return err
+		}
 
 	default:
+		err = fmt.Errorf("unknown metric type: %s", metricType)
 		h.log.Error("unknown metric type in update",
 			zap.String("metric_type", metricType),
 			zap.String("metric_name", metricName))
-		return http.StatusBadRequest, fmt.Errorf("unknown metric type")
+		http.Error(w, "unknown metric type", http.StatusBadRequest)
+		return err
+	}
+	return nil
+}
+
+func (h *MetricsHandler) updateMetricFromJSON(
+	w http.ResponseWriter,
+	ctx context.Context,
+	data model.Metrics,
+) error {
+	metricType := strings.ToLower(data.MType)
+	metricName := data.ID
+
+	if !isValidMetricType(metricType) {
+		err := fmt.Errorf("unknown metric type: %s", data.MType)
+		h.log.Error("unknown metric type in JSON",
+			zap.String("metric_type", data.MType),
+			zap.String("metric_name", data.ID))
+		http.Error(w, "unknown metric type", http.StatusBadRequest)
+		return err
 	}
 
-	return http.StatusOK, nil
+	switch metricType {
+	case model.Gauge:
+		if data.Value == nil {
+			err := fmt.Errorf("gauge metric value is nil")
+			h.log.Error("gauge metric value is nil",
+				zap.String("metric_name", metricName))
+			http.Error(w, "metric value is required for gauge", http.StatusBadRequest)
+			return err
+		}
+		err := h.service.UpdateGauge(ctx, metricName, *data.Value)
+		if err != nil {
+			h.log.Error("error updating gauge metric from JSON",
+				zap.String("metric_name", metricName),
+				zap.Float64("metric_value", *data.Value),
+				zap.Error(err))
+			http.Error(w, "failed to update gauge metric", http.StatusInternalServerError)
+			return err
+		}
+
+	case model.Counter:
+		if data.Delta == nil {
+			err := fmt.Errorf("counter metric delta is nil")
+			h.log.Error("counter metric delta is nil",
+				zap.String("metric_name", metricName))
+			http.Error(w, "metric delta is required for counter", http.StatusBadRequest)
+			return err
+		}
+		err := h.service.UpdateCounter(ctx, metricName, *data.Delta)
+		if err != nil {
+			h.log.Error("error updating counter metric from JSON",
+				zap.String("metric_name", metricName),
+				zap.Int64("metric_delta", *data.Delta),
+				zap.Error(err))
+			http.Error(w, "failed to update counter metric", http.StatusInternalServerError)
+			return err
+		}
+	}
+	return nil
+}
+
+func (h *MetricsHandler) getMetricForJSONResponse(
+	w http.ResponseWriter,
+	ctx context.Context,
+	data model.Metrics,
+) (model.Metrics, error) {
+	var resp model.Metrics
+	var err error
+	metricType := strings.ToLower(data.MType)
+
+	if !isValidMetricType(metricType) {
+		err = fmt.Errorf("unknown metric type: %s", data.MType)
+		h.log.Error("unknown metric type in request",
+			zap.String("metric_type", data.MType))
+		http.Error(w, "unknown metric type", http.StatusBadRequest)
+		return resp, err
+	}
+
+	switch metricType {
+	case model.Gauge:
+		gaugeValue, getErr := h.service.GetGauge(ctx, data.ID)
+		if getErr != nil {
+			err = getErr
+			h.log.Error("error getting gauge metric",
+				zap.String("metric_name", data.ID),
+				zap.Error(err))
+			http.Error(w, "metric not found", http.StatusNotFound)
+			return resp, err
+		}
+		resp = model.Metrics{
+			ID:    data.ID,
+			MType: data.MType,
+			Value: &gaugeValue,
+		}
+
+	case model.Counter:
+		counterValue, getErr := h.service.GetCounter(ctx, data.ID)
+		if getErr != nil {
+			err = getErr
+			h.log.Error("error getting counter metric",
+				zap.String("metric_name", data.ID),
+				zap.Error(err))
+			http.Error(w, "metric not found", http.StatusNotFound)
+			return resp, err
+		}
+		resp = model.Metrics{
+			ID:    data.ID,
+			MType: data.MType,
+			Delta: &counterValue,
+		}
+	}
+
+	return resp, nil
+}
+
+func (h *MetricsHandler) logAndWriteError(
+	w http.ResponseWriter,
+	err error,
+	statusCode int,
+	msg string,
+	fields ...zap.Field,
+) {
+	logEntry := h.log.With(fields...)
+	logEntry.Error(msg, zap.Error(err))
+	http.Error(w, msg, statusCode)
 }
