@@ -127,10 +127,6 @@ func TestMainPageHandler_ContextPropagation(t *testing.T) {
 		mockService := mocks.NewMockMainPageService(ctrl)
 		handler := NewMainPageHandler(mockService)
 
-		// Создаем контекст с конкретным значением
-		type contextKey string
-		const key contextKey = "test-key"
-
 		mockService.EXPECT().
 			GetMainPage(gomock.Any()).
 			DoAndReturn(func(ctx context.Context) (string, error) {

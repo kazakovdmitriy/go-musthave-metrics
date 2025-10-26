@@ -135,12 +135,51 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	return finalBody, nil
 }
 
+func (c *Client) doRequestWithRetry(method, endpoint string, body interface{}) ([]byte, error) {
+	var lastErr error
+	intervals := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
+	attempts := len(intervals) + 1
+
+	for i := 0; i < attempts; i++ {
+		resp, err := c.doRequest(method, endpoint, body)
+		if err == nil {
+			return resp, err
+		}
+
+		if !isNetworkError(err) {
+			return nil, err
+		}
+
+		lastErr = err
+
+		if i < len(intervals) {
+			c.log.Info(
+				"Retrying request due to network error",
+				zap.String("method", method),
+				zap.String("endpoint", endpoint),
+				zap.Int("attempt", i+1),
+				zap.Duration("sleep", intervals[i]),
+				zap.Error(err),
+			)
+			time.Sleep(intervals[i])
+		}
+	}
+
+	return nil, fmt.Errorf("request failed after %d attempts: %w", attempts, lastErr)
+}
+
+func isNetworkError(err error) bool {
+	return strings.Contains(err.Error(), "connection refused") ||
+		strings.Contains(err.Error(), "timeout") ||
+		strings.Contains(err.Error(), "network")
+}
+
 func (c *Client) Post(endpoint string, body interface{}) ([]byte, error) {
-	return c.doRequest(http.MethodPost, endpoint, body)
+	return c.doRequestWithRetry(http.MethodPost, endpoint, body)
 }
 
 func (c *Client) Get(endpoint string) ([]byte, error) {
-	return c.doRequest(http.MethodGet, endpoint, nil)
+	return c.doRequestWithRetry(http.MethodGet, endpoint, nil)
 }
 
 func isGzipEncoding(enc string) bool {
