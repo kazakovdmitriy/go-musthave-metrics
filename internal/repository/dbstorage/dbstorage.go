@@ -3,8 +3,14 @@ package dbstorage
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"strings"
+	"time"
 
+	"github.com/jackc/pgconn"
+	"github.com/jackc/pgerrcode"
+	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
@@ -35,7 +41,12 @@ func (db *dbstorage) UpdateGauge(ctx context.Context, name string, value float64
 		ON CONFLICT (id) DO UPDATE
 		SET value = EXCLUDED.value;
 	`
-	_, err := db.db.Exec(ctx, query, name, value)
+
+	err := execWithRetry(ctx, func() error {
+		_, execErr := db.db.Exec(ctx, query, name, value)
+		return execErr
+	})
+
 	if err != nil {
 		db.log.Error(
 			"failed to update gauge",
@@ -54,7 +65,11 @@ func (db *dbstorage) UpdateCounter(ctx context.Context, name string, value int64
 		SET delta = metrics.delta + $2;
 	`
 
-	_, err := db.db.Exec(ctx, query, name, value)
+	err := execWithRetry(ctx, func() error {
+		_, execErr := db.db.Exec(ctx, query, name, value)
+		return execErr
+	})
+
 	if err != nil {
 		db.log.Error(
 			"failed to update counter",
@@ -66,67 +81,70 @@ func (db *dbstorage) UpdateCounter(ctx context.Context, name string, value int64
 }
 
 func (db *dbstorage) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {
-	tx, err := db.db.Begin(ctx)
-	if err != nil {
-		db.log.Error("failed to begin transaction", zap.Error(err))
-		return fmt.Errorf("failed to begin transaction: %w", err)
-	}
-	defer tx.Rollback(ctx)
-
-	gaugeQuery := `
-        INSERT INTO metrics (id, mtype, value)
-        VALUES ($1, 'gauge', $2)
-        ON CONFLICT (id) DO UPDATE
-        SET value = EXCLUDED.value;`
-
-	counterQuery := `
-        INSERT INTO metrics (id, mtype, delta)
-        VALUES ($1, 'counter', $2)
-        ON CONFLICT (id) DO UPDATE
-        SET delta = metrics.delta + EXCLUDED.delta;`
-
-	for _, metric := range metrics {
-		switch metric.MType {
-		case model.Gauge:
-			if metric.Value == nil {
-				db.log.Warn("gauge metric value is nil, skipping",
-					zap.String("metric_id", metric.ID))
-				continue
-			}
-			_, err := tx.Exec(ctx, gaugeQuery, metric.ID, *metric.Value)
-			if err != nil {
-				db.log.Error("failed to update gauge metric in batch",
-					zap.Error(err),
-					zap.String("metric_id", metric.ID),
-					zap.Float64("value", *metric.Value))
-				return fmt.Errorf("failed to update gauge metric %s: %w", metric.ID, err)
-			}
-
-		case model.Counter:
-			if metric.Delta == nil {
-				db.log.Warn("counter metric delta is nil, skipping",
-					zap.String("metric_id", metric.ID))
-				continue
-			}
-			_, err := tx.Exec(ctx, counterQuery, metric.ID, *metric.Delta)
-			if err != nil {
-				db.log.Error("failed to update counter metric in batch",
-					zap.Error(err),
-					zap.String("metric_id", metric.ID),
-					zap.Int64("delta", *metric.Delta))
-				return fmt.Errorf("failed to update counter metric %s: %w", metric.ID, err)
-			}
-
-		default:
-			db.log.Warn("unknown metric type, skipping",
-				zap.String("metric_type", metric.MType),
-				zap.String("metric_id", metric.ID))
+	err := execWithRetry(ctx, func() error {
+		tx, txErr := db.db.Begin(ctx)
+		if txErr != nil {
+			return txErr
 		}
-	}
+		defer tx.Rollback(ctx)
 
-	if err := tx.Commit(ctx); err != nil {
-		db.log.Error("failed to commit transaction", zap.Error(err))
-		return fmt.Errorf("failed to commit transaction: %w", err)
+		gaugeQuery := `
+			INSERT INTO metrics (id, mtype, value)
+			VALUES ($1, 'gauge', $2)
+			ON CONFLICT (id) DO UPDATE
+			SET value = EXCLUDED.value;`
+
+		counterQuery := `
+			INSERT INTO metrics (id, mtype, delta)
+			VALUES ($1, 'counter', $2)
+			ON CONFLICT (id) DO UPDATE
+			SET delta = metrics.delta + EXCLUDED.delta;`
+
+		for _, metric := range metrics {
+			switch metric.MType {
+			case model.Gauge:
+				if metric.Value == nil {
+					db.log.Warn("gauge metric value is nil, skipping",
+						zap.String("metric_id", metric.ID))
+					continue
+				}
+				_, err := tx.Exec(ctx, gaugeQuery, metric.ID, *metric.Value)
+				if err != nil {
+					db.log.Error("failed to update gauge metric in batch",
+						zap.Error(err),
+						zap.String("metric_id", metric.ID),
+						zap.Float64("value", *metric.Value))
+					return fmt.Errorf("failed to update gauge metric %s: %w", metric.ID, err)
+				}
+
+			case model.Counter:
+				if metric.Delta == nil {
+					db.log.Warn("counter metric delta is nil, skipping",
+						zap.String("metric_id", metric.ID))
+					continue
+				}
+				_, err := tx.Exec(ctx, counterQuery, metric.ID, *metric.Delta)
+				if err != nil {
+					db.log.Error("failed to update counter metric in batch",
+						zap.Error(err),
+						zap.String("metric_id", metric.ID),
+						zap.Int64("delta", *metric.Delta))
+					return fmt.Errorf("failed to update counter metric %s: %w", metric.ID, err)
+				}
+
+			default:
+				db.log.Warn("unknown metric type, skipping",
+					zap.String("metric_type", metric.MType),
+					zap.String("metric_id", metric.ID))
+			}
+		}
+
+		return tx.Commit(ctx)
+	})
+
+	if err != nil {
+		db.log.Error("failed to update metrics batch after retries", zap.Error(err))
+		return err
 	}
 
 	db.log.Info("successfully updated metrics batch",
@@ -135,67 +153,104 @@ func (db *dbstorage) UpdateMetrics(ctx context.Context, metrics []model.Metrics)
 }
 
 func (db *dbstorage) GetGauge(ctx context.Context, name string) (float64, bool) {
-	query := `SELECT value FROM metrics WHERE id = $1 AND mtype = 'gauge';`
 	var value float64
-	err := db.db.QueryRow(ctx, query, name).Scan(&value)
+	var found bool
+
+	err := execWithRetry(ctx, func() error {
+		err := db.db.QueryRow(ctx, `SELECT value FROM metrics WHERE id = $1 AND mtype = 'gauge';`, name).Scan(&value)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		found = true
+		return nil
+	})
+
 	if err != nil {
+		db.log.Error("failed to get gauge after retries", zap.Error(err), zap.String("metric_name", name))
+		return 0.0, false
+	}
+
+	if !found {
 		return 0.0, false
 	}
 	return value, true
 }
 
 func (db *dbstorage) GetCounter(ctx context.Context, name string) (int64, bool) {
-	query := `SELECT delta FROM metrics WHERE id = $1 AND mtype = 'counter';`
 	var delta int64
-	err := db.db.QueryRow(ctx, query, name).Scan(&delta)
+	err := execWithRetry(ctx, func() error {
+		err := db.db.QueryRow(ctx, `SELECT delta FROM metrics WHERE id = $1 AND mtype = 'counter';`, name).Scan(&delta)
+		if err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil
+			}
+			return err
+		}
+		return nil
+	})
+
 	if err != nil {
+		db.log.Error("failed to get counter after retries", zap.Error(err), zap.String("metric_name", name))
 		return 0, false
 	}
+
 	return delta, true
 }
 
 func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
-	query := `SELECT id, mtype, delta, value FROM metrics;`
-	rows, err := db.db.Query(ctx, query)
+	var result string
+	err := execWithRetry(ctx, func() error {
+		rows, err := db.db.Query(ctx, `SELECT id, mtype, delta, value FROM metrics;`)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+
+		found := false
+		result = "<ul>\n"
+
+		for rows.Next() {
+			found = true
+			var id, mtype string
+			var delta sql.NullInt64
+			var value sql.NullFloat64
+
+			if err := rows.Scan(&id, &mtype, &delta, &value); err != nil {
+				return fmt.Errorf("failed to scan metric row: %w", err)
+			}
+
+			switch mtype {
+			case "counter":
+				if delta.Valid {
+					result += fmt.Sprintf("<li>%s = %d</li>\n", id, delta.Int64)
+				}
+			case "gauge":
+				if value.Valid {
+					result += fmt.Sprintf("<li>%s = %f</li>\n", id, value.Float64)
+				}
+			}
+		}
+
+		if err = rows.Err(); err != nil {
+			return fmt.Errorf("row iteration error: %w", err)
+		}
+
+		if !found {
+			return fmt.Errorf("no metrics found")
+		}
+
+		result += "</ul>\n"
+		return nil
+	})
+
 	if err != nil {
-		return "", fmt.Errorf("failed to query all metrics: %w", err)
-	}
-	defer rows.Close()
-
-	result := "<ul>\n"
-	found := false
-
-	for rows.Next() {
-		found = true
-		var id, mtype string
-		var delta sql.NullInt64
-		var value sql.NullFloat64
-
-		if err := rows.Scan(&id, &mtype, &delta, &value); err != nil {
-			return "", fmt.Errorf("failed to scan metric row: %w", err)
-		}
-
-		switch mtype {
-		case "counter":
-			if delta.Valid {
-				result += fmt.Sprintf("<li>%s = %d</li>\n", id, delta.Int64)
-			}
-		case "gauge":
-			if value.Valid {
-				result += fmt.Sprintf("<li>%s = %f</li>\n", id, value.Float64)
-			}
-		}
+		db.log.Error("failed to get all metrics after retries", zap.Error(err))
+		return "", err
 	}
 
-	if err = rows.Err(); err != nil {
-		return "", fmt.Errorf("row iteration error: %w", err)
-	}
-
-	if !found {
-		return "", fmt.Errorf("no metrics found")
-	}
-
-	result += "</ul>\n"
 	return result, nil
 }
 
@@ -209,4 +264,51 @@ func (db *dbstorage) Ping(ctx context.Context) error {
 func (db *dbstorage) Close() error {
 	db.db.Close()
 	return nil
+}
+
+func isConnectionError(err error) bool {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) {
+		return pgErr.Code == pgerrcode.AdminShutdown ||
+			pgErr.Code == pgerrcode.CannotConnectNow ||
+			pgErr.Code == pgerrcode.ConnectionException ||
+			pgErr.Code == pgerrcode.ConnectionDoesNotExist ||
+			pgErr.Code == pgerrcode.ConnectionFailure ||
+			pgErr.Code == pgerrcode.SQLClientUnableToEstablishSQLConnection ||
+			pgErr.Code == pgerrcode.SQLServerRejectedEstablishmentOfSQLConnection ||
+			pgErr.Code == pgerrcode.TransactionResolutionUnknown
+	}
+	return strings.Contains(err.Error(), "connection refused") ||
+		strings.Contains(err.Error(), "network") ||
+		strings.Contains(err.Error(), "timeout")
+}
+
+func execWithRetry(ctx context.Context, fn func() error) error {
+	intervals := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
+	attempts := len(intervals) + 1
+
+	var lastErr error
+
+	for i := 0; i < attempts; i++ {
+		err := fn()
+		if err == nil {
+			return nil
+		}
+
+		if !isConnectionError(err) {
+			return err
+		}
+
+		lastErr = err
+
+		if i < len(intervals) {
+			select {
+			case <-time.After(intervals[i]):
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+		}
+	}
+
+	return fmt.Errorf("database operation failed after %d attempts: %w", attempts, lastErr)
 }
