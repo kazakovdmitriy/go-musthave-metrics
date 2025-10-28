@@ -3,6 +3,7 @@ package agent
 import (
 	"bytes"
 	"compress/gzip"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
 	"go.uber.org/zap"
 )
@@ -135,37 +137,29 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	return finalBody, nil
 }
 
-func (c *Client) doRequestWithRetry(method, endpoint string, body interface{}) ([]byte, error) {
-	var lastErr error
-	intervals := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
-	attempts := len(intervals) + 1
+func (c *Client) doRequestWithRetry(ctx context.Context, method, endpoint string, body interface{}) ([]byte, error) {
+	var response []byte
 
-	for i := 0; i < attempts; i++ {
-		resp, err := c.doRequest(method, endpoint, body)
-		if err == nil {
-			return resp, err
-		}
-
-		if !isNetworkError(err) {
-			return nil, err
-		}
-
-		lastErr = err
-
-		if i < len(intervals) {
-			c.log.Info(
-				"Retrying request due to network error",
-				zap.String("method", method),
-				zap.String("endpoint", endpoint),
-				zap.Int("attempt", i+1),
-				zap.Duration("sleep", intervals[i]),
-				zap.Error(err),
-			)
-			time.Sleep(intervals[i])
-		}
+	cfg := retry.RetryConfig{
+		MaxRetries:    3,
+		Delays:        []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
+		IsRetryableFn: isNetworkError,
 	}
 
-	return nil, fmt.Errorf("request failed after %d attempts: %w", attempts, lastErr)
+	err := retry.Do(ctx, cfg, func() error {
+		resp, err := c.doRequest(method, endpoint, body)
+		if err != nil {
+			return err
+		}
+		response = resp
+		return nil
+	})
+
+	if err != nil {
+		return nil, err
+	}
+
+	return response, nil
 }
 
 func isNetworkError(err error) bool {
@@ -174,12 +168,12 @@ func isNetworkError(err error) bool {
 		strings.Contains(err.Error(), "network")
 }
 
-func (c *Client) Post(endpoint string, body interface{}) ([]byte, error) {
-	return c.doRequestWithRetry(http.MethodPost, endpoint, body)
+func (c *Client) Post(ctx context.Context, endpoint string, body interface{}) ([]byte, error) {
+	return c.doRequestWithRetry(ctx, http.MethodPost, endpoint, body)
 }
 
-func (c *Client) Get(endpoint string) ([]byte, error) {
-	return c.doRequestWithRetry(http.MethodGet, endpoint, nil)
+func (c *Client) Get(ctx context.Context, endpoint string) ([]byte, error) {
+	return c.doRequestWithRetry(ctx, http.MethodGet, endpoint, nil)
 }
 
 func isGzipEncoding(enc string) bool {

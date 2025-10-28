@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
 )
@@ -22,14 +23,20 @@ var _ service.Storage = (*dbstorage)(nil)
 var _ ping.HealthChecker = (*dbstorage)(nil)
 
 type dbstorage struct {
-	db  *pgxpool.Pool
-	log *zap.Logger
+	db       *pgxpool.Pool
+	log      *zap.Logger
+	retryCfg retry.RetryConfig
 }
 
 func NewDBStorage(db *pgxpool.Pool, log *zap.Logger) *dbstorage {
 	storage := &dbstorage{
 		db:  db,
 		log: log,
+		retryCfg: retry.RetryConfig{
+			MaxRetries:    3,
+			Delays:        []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
+			IsRetryableFn: isConnectionError,
+		},
 	}
 	return storage
 }
@@ -42,7 +49,7 @@ func (db *dbstorage) UpdateGauge(ctx context.Context, name string, value float64
 		SET value = EXCLUDED.value;
 	`
 
-	err := execWithRetry(ctx, func() error {
+	err := retry.Do(ctx, db.retryCfg, func() error {
 		_, execErr := db.db.Exec(ctx, query, name, value)
 		return execErr
 	})
@@ -65,7 +72,7 @@ func (db *dbstorage) UpdateCounter(ctx context.Context, name string, value int64
 		SET delta = metrics.delta + $2;
 	`
 
-	err := execWithRetry(ctx, func() error {
+	err := retry.Do(ctx, db.retryCfg, func() error {
 		_, execErr := db.db.Exec(ctx, query, name, value)
 		return execErr
 	})
@@ -81,7 +88,7 @@ func (db *dbstorage) UpdateCounter(ctx context.Context, name string, value int64
 }
 
 func (db *dbstorage) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {
-	err := execWithRetry(ctx, func() error {
+	err := retry.Do(ctx, db.retryCfg, func() error {
 		tx, txErr := db.db.Begin(ctx)
 		if txErr != nil {
 			return txErr
@@ -156,7 +163,7 @@ func (db *dbstorage) GetGauge(ctx context.Context, name string) (float64, bool) 
 	var value float64
 	var found bool
 
-	err := execWithRetry(ctx, func() error {
+	err := retry.Do(ctx, db.retryCfg, func() error {
 		err := db.db.QueryRow(ctx, `SELECT value FROM metrics WHERE id = $1 AND mtype = 'gauge';`, name).Scan(&value)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -181,7 +188,8 @@ func (db *dbstorage) GetGauge(ctx context.Context, name string) (float64, bool) 
 
 func (db *dbstorage) GetCounter(ctx context.Context, name string) (int64, bool) {
 	var delta int64
-	err := execWithRetry(ctx, func() error {
+
+	err := retry.Do(ctx, db.retryCfg, func() error {
 		err := db.db.QueryRow(ctx, `SELECT delta FROM metrics WHERE id = $1 AND mtype = 'counter';`, name).Scan(&delta)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -202,7 +210,8 @@ func (db *dbstorage) GetCounter(ctx context.Context, name string) (int64, bool) 
 
 func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
 	var result string
-	err := execWithRetry(ctx, func() error {
+
+	err := retry.Do(ctx, db.retryCfg, func() error {
 		rows, err := db.db.Query(ctx, `SELECT id, mtype, delta, value FROM metrics;`)
 		if err != nil {
 			return err
@@ -281,34 +290,4 @@ func isConnectionError(err error) bool {
 	return strings.Contains(err.Error(), "connection refused") ||
 		strings.Contains(err.Error(), "network") ||
 		strings.Contains(err.Error(), "timeout")
-}
-
-func execWithRetry(ctx context.Context, fn func() error) error {
-	intervals := []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second}
-	attempts := len(intervals) + 1
-
-	var lastErr error
-
-	for i := 0; i < attempts; i++ {
-		err := fn()
-		if err == nil {
-			return nil
-		}
-
-		if !isConnectionError(err) {
-			return err
-		}
-
-		lastErr = err
-
-		if i < len(intervals) {
-			select {
-			case <-time.After(intervals[i]):
-			case <-ctx.Done():
-				return ctx.Err()
-			}
-		}
-	}
-
-	return fmt.Errorf("database operation failed after %d attempts: %w", attempts, lastErr)
 }

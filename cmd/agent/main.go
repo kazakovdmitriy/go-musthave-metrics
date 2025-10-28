@@ -80,7 +80,7 @@ func main() {
 				deltaCount := poolCount
 				metricsMutex.RUnlock()
 
-				_, err := agent.SendMetrics(client, currentMetrics, int64(deltaCount), logg)
+				_, err := agent.SendMetrics(ctx, client, currentMetrics, int64(deltaCount), logg)
 				if err != nil {
 					logg.Error("error from server", zap.Error(err))
 				} else {

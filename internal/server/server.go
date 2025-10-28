@@ -117,8 +117,11 @@ func (a *Server) storageInitializer(ctx context.Context) *service.Storage {
 
 	if a.cfg.DatabaseDSN != "" {
 		dbase, err := db.NewDatabase(ctx, a.cfg.DatabaseDSN)
-		if err != nil && dbase.IsConnected() {
-			a.log.Warn("Failed to connect to DB, failing back to in-memory storage", zap.Error(err))
+		if err != nil {
+			a.log.Warn("Failed to connect to DB, falling back to in-memory storage", zap.Error(err))
+			storage = memstorage.NewMemStorage(a.cfg, a.log)
+		} else if !dbase.IsConnected() {
+			a.log.Warn("DB connection is not active, falling back to in-memory storage")
 			storage = memstorage.NewMemStorage(a.cfg, a.log)
 		} else {
 			migrator := db.NewMigrator(a.cfg.DatabaseDSN, "migrations", a.log)
