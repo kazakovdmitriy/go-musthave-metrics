@@ -69,6 +69,29 @@ func (m *memStorage) UpdateCounter(ctx context.Context, name string, value int64
 	}
 }
 
+func (m *memStorage) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	for _, metric := range metrics {
+		switch metric.MType {
+		case model.Gauge:
+			if metric.Value != nil {
+				m.gauges[metric.ID] = *metric.Value
+			}
+		case model.Counter:
+			if metric.Delta != nil {
+				if existing, exists := m.counters[metric.ID]; exists {
+					m.counters[metric.ID] = existing + *metric.Delta
+				} else {
+					m.counters[metric.ID] = *metric.Delta
+				}
+			}
+		}
+	}
+	return nil
+}
+
 func (m *memStorage) GetGauge(ctx context.Context, name string) (float64, bool) {
 	m.mu.Lock()
 	defer m.mu.Unlock()

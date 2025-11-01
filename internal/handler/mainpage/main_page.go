@@ -9,9 +9,11 @@ type MainPageHandler struct {
 }
 
 func NewMainPageHandler(service MainPageService) *MainPageHandler {
-	return &MainPageHandler{
-		service: service,
+
+	if service == nil {
+		return nil
 	}
+	return &MainPageHandler{service: service}
 }
 
 func (h *MainPageHandler) GetMainPage(w http.ResponseWriter, r *http.Request) {

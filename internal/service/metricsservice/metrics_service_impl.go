@@ -3,7 +3,9 @@ package metricsservice
 import (
 	"context"
 	"errors"
+	"fmt"
 
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
@@ -24,6 +26,13 @@ func (s *metricsService) UpdateGauge(ctx context.Context, name string, value flo
 
 func (s *metricsService) UpdateCounter(ctx context.Context, name string, value int64) error {
 	s.storage.UpdateCounter(ctx, name, value)
+	return nil
+}
+
+func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {
+	if err := s.storage.UpdateMetrics(ctx, metrics); err != nil {
+		return fmt.Errorf("failed to save metrics in storage: %w", err)
+	}
 	return nil
 }
 
