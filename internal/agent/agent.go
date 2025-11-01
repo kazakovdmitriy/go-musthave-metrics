@@ -1,11 +1,14 @@
 package agent
 
 import (
+	"context"
+
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"go.uber.org/zap"
 )
 
 func SendMetrics(
+	ctx context.Context,
 	client *Client,
 	metrics MemoryMetrics,
 	deltaCounter int64,
@@ -44,7 +47,7 @@ func SendMetrics(
 		return nil, nil
 	}
 
-	response, err := client.Post("/updates/", batch)
+	response, err := client.Post(ctx, "/updates/", batch)
 	if err != nil {
 		log.Error(
 			"failed to send metrics batch",
