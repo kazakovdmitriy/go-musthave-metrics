@@ -15,6 +15,7 @@ type ServerFlags struct {
 	FileStoragePath string `env:"FILE_STORAGE_PATH"`
 	Restore         bool   `env:"RESTORE"`
 	DatabaseDSN     string `env:"DATABASE_DSN"`
+	SecretKet       string `env:"KEY"`
 }
 
 func ParseServerConfig() *ServerFlags {
@@ -52,6 +53,7 @@ func parseServerFlag(cfg *ServerFlags) {
 	flags.StringVarP(&cfg.FileStoragePath, "filePath", "f", "metrics.json", "Path to file to save metrics")
 	flags.BoolVarP(&cfg.Restore, "restore", "r", false, "Load metrics on start")
 	flags.StringVarP(&cfg.DatabaseDSN, "database_dsn", "d", "", "DSN string for db connection")
+	flags.StringVarP(&cfg.SecretKet, "", "k", "", "Secret key")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		log.Printf("Error parsing command-line flags: %v", err)

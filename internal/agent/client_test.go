@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang/mock/gomock"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/mocks" // замените на ваш путь к мокам
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/zap/zaptest"
@@ -19,6 +21,7 @@ import (
 
 func TestNewClient(t *testing.T) {
 	logger := zaptest.NewLogger(t)
+	// signer передаётся в конструктор, для тестов без подписи передаём nil
 	tests := []struct {
 		name     string
 		baseURL  string
@@ -41,8 +44,8 @@ func TestNewClient(t *testing.T) {
 		},
 		{
 			name:     "https url",
-			baseURL:  "https://example.com    ",
-			expected: "https://example.com    ",
+			baseURL:  "https://example.com      ",
+			expected: "https://example.com      ",
 		},
 		{
 			name:     "with path",
@@ -53,7 +56,7 @@ func TestNewClient(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			client := NewClient(tt.baseURL, logger)
+			client := NewClient(tt.baseURL, nil, logger)
 			assert.Equal(t, tt.expected, client.baseURL)
 			assert.NotNil(t, client.httpClient)
 			assert.Equal(t, time.Second*20, client.httpClient.Timeout)
@@ -66,7 +69,7 @@ func TestNewClient(t *testing.T) {
 
 func TestClient_SetHeaders(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	client := NewClient("http://example.com", logger)
+	client := NewClient("http://example.com", nil, logger)
 	client.SetHeaders("Authorization", "Bearer token")
 	client.SetHeaders("X-Custom", "value")
 
@@ -76,7 +79,7 @@ func TestClient_SetHeaders(t *testing.T) {
 
 func TestClient_SetCompression(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	client := NewClient("http://example.com", logger)
+	client := NewClient("http://example.com", nil, logger)
 
 	// Test valid compression level
 	client.SetCompression(true, gzip.BestCompression)
@@ -95,7 +98,7 @@ func TestClient_SetCompression(t *testing.T) {
 
 func TestClient_SetMinSizeToCompress(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	client := NewClient("http://example.com", logger)
+	client := NewClient("http://example.com", nil, logger)
 	client.SetMinSizeToCompress(100)
 
 	assert.Equal(t, 100, client.minSizeToCompress)
@@ -103,7 +106,7 @@ func TestClient_SetMinSizeToCompress(t *testing.T) {
 
 func TestClient_shouldCompressRequest(t *testing.T) {
 	logger := zaptest.NewLogger(t)
-	client := NewClient("http://example.com", logger)
+	client := NewClient("http://example.com", nil, logger)
 
 	// Test with compression disabled
 	client.UseGzip = false
@@ -147,7 +150,7 @@ func TestClient_Post(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, logger)
+	client := NewClient(server.URL, nil, logger)
 
 	resp, err := client.Post(context.Background(), "/test", expectedData)
 	require.NoError(t, err)
@@ -189,7 +192,7 @@ func TestClient_PostWithCompression(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, logger)
+	client := NewClient(server.URL, nil, logger)
 	client.SetMinSizeToCompress(50) // Make sure our data will be compressed
 
 	resp, err := client.Post(context.Background(), "/test", largeData)
@@ -209,11 +212,10 @@ func TestClient_PostWithCustomHeaders(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, logger)
+	client := NewClient(server.URL, nil, logger)
 	client.SetHeaders("Authorization", "Bearer test-token")
 	client.SetHeaders("X-Custom-Header", "custom-value")
 
-	// Исправленный вызов: добавлен context
 	resp, err := client.Post(context.Background(), "/test", map[string]string{"key": "value"})
 	require.NoError(t, err)
 	assert.Equal(t, `{"status": "headers_ok"}`, string(resp))
@@ -228,7 +230,7 @@ func TestClient_ErrorCases(t *testing.T) {
 		}))
 		defer server.Close()
 
-		client := NewClient(server.URL, logger)
+		client := NewClient(server.URL, nil, logger)
 
 		_, err := client.Get(context.Background(), "/error")
 		assert.Error(t, err)
@@ -237,21 +239,9 @@ func TestClient_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("invalid json in request", func(t *testing.T) {
-		client := NewClient("http://localhost:9999", logger) // Non-existent server
+		client := NewClient("http://localhost:9999", nil, logger) // Non-existent server
 
-		// Create a struct with unmarshalable data
-		// Note: This will cause json.Marshal to panic, not return an error.
-		// To test marshaling errors, avoid unmarshalable types like chan.
-		// Let's use a type that *can* be marshaled but causes an error later if needed.
-		// Actually, `chan int` inside a struct field will cause json.Marshal to return an error.
-		// The original test was correct in intent, but Go's json.Marshal panics on chan.
-		// To simulate a marshaling error, we can pass a nil writer or use reflect, but simplest is to avoid chan.
-		// Let's just test the marshaling error scenario by passing a function, which json.Marshal also cannot handle.
-		// Actually, json.Marshal does NOT panic on `chan int` directly if it's a top-level value passed to Marshal,
-		// but it panics when it encounters unserializable types during reflection.
-		// The safest way to test this is to avoid the problematic type or mock the Marshal function.
-		// For simplicity here, we'll assume the original intent was to pass something json.Marshal can't handle.
-		// Using `func() {}` will cause json.Marshal to return an error.
+		// Using a struct with a function field to cause json.Marshal error
 		invalidData := struct {
 			Fn func() `json:"fn"` // Functions cannot be marshaled
 		}{Fn: func() {}}
@@ -262,9 +252,8 @@ func TestClient_ErrorCases(t *testing.T) {
 	})
 
 	t.Run("network error", func(t *testing.T) {
-		client := NewClient("http://localhost:9999", logger) // Non-existent server
+		client := NewClient("http://localhost:9999", nil, logger) // Non-existent server
 
-		// Исправленный вызов: добавлен context
 		_, err := client.Get(context.Background(), "/test")
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "executing request failed")
@@ -333,7 +322,7 @@ func TestClient_PostWithEmptyBody(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, logger)
+	client := NewClient(server.URL, nil, logger)
 
 	resp, err := client.Post(context.Background(), "/test", nil)
 	require.NoError(t, err)
@@ -361,10 +350,86 @@ func TestClient_CompressionDisabled(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewClient(server.URL, logger)
+	client := NewClient(server.URL, nil, logger)
 	client.SetCompression(false, gzip.DefaultCompression)
 
 	resp, err := client.Post(context.Background(), "/test", data)
 	require.NoError(t, err)
 	assert.Equal(t, `{"status": "no_compression"}`, string(resp))
+}
+
+// --- Новые тесты для подписи ---
+func TestClient_PostWithSigner(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	ctrl := gomock.NewController(t)
+	defer ctrl.Finish()
+
+	// Создаём мок signer
+	mockSigner := mocks.NewMockSigner(ctrl)
+
+	expectedData := map[string]interface{}{"metric": "value"}
+	jsonData, err := json.Marshal(expectedData)
+	require.NoError(t, err)
+
+	expectedHash := "aabbccddeeff11223344556677889900" // фейковый хеш
+
+	// Ожидаем, что Sign будет вызван с конкретным телом
+	mockSigner.EXPECT().Sign(jsonData).Return(expectedHash).Times(1)
+
+	// Запускаем тест-сервер, который проверит заголовок HashSHA256
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, http.MethodPost, r.Method)
+		assert.Equal(t, expectedHash, r.Header.Get("HashSHA256"), "HashSHA256 header should match the signed hash")
+
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		var receivedData map[string]interface{}
+		err = json.Unmarshal(body, &receivedData)
+		require.NoError(t, err)
+		assert.Equal(t, expectedData, receivedData)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "signed_ok"}`))
+	}))
+	defer server.Close()
+
+	// Передаём мок в конструктор
+	client := NewClient(server.URL, mockSigner, logger)
+
+	resp, err := client.Post(context.Background(), "/test", expectedData)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "signed_ok"}`, string(resp))
+}
+
+func TestClient_PostWithoutSigner(t *testing.T) {
+	logger := zaptest.NewLogger(t)
+
+	expectedData := map[string]interface{}{"metric": "value"}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		assert.Equal(t, "", r.Header.Get("HashSHA256"), "HashSHA256 header should not be present when signer is not set")
+
+		body, err := io.ReadAll(r.Body)
+		require.NoError(t, err)
+
+		var receivedData map[string]interface{}
+		err = json.Unmarshal(body, &receivedData)
+		require.NoError(t, err)
+		assert.Equal(t, expectedData, receivedData)
+
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write([]byte(`{"status": "no_signer_ok"}`))
+	}))
+	defer server.Close()
+
+	// Передаём nil signer
+	client := NewClient(server.URL, nil, logger)
+
+	resp, err := client.Post(context.Background(), "/test", expectedData)
+	require.NoError(t, err)
+	assert.Equal(t, `{"status": "no_signer_ok"}`, string(resp))
 }
