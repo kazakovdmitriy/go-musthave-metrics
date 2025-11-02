@@ -10,10 +10,7 @@ type SHA256Signer struct {
 }
 
 func NewSHA256Signer(key string) *SHA256Signer {
-	if key != "" {
-		return &SHA256Signer{key: key}
-	}
-	return nil
+	return &SHA256Signer{key: key}
 }
 
 func (s *SHA256Signer) Sign(data []byte) string {

@@ -11,6 +11,7 @@ import (
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/signerservice"
 	"go.uber.org/zap"
@@ -25,8 +26,11 @@ func main() {
 	}
 	defer logg.Sync()
 
-	signer := signerservice.NewSHA256Signer(cfg.SecretKet)
-	client := agent.NewClient(cfg.ServerAddr, signer, logg)
+	var signerService signer.Signer = nil
+	if cfg.SecretKet != "" {
+		signerService = signerservice.NewSHA256Signer(cfg.SecretKet)
+	}
+	client := agent.NewClient(cfg.ServerAddr, signerService, logg)
 
 	polingInterval := time.Duration(cfg.PollingInterval) * time.Second
 	reportInterval := time.Duration(cfg.ReportInterval) * time.Second

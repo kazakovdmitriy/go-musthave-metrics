@@ -30,7 +30,10 @@ func SetupHandler(
 	r := chi.NewRouter()
 
 	compressorService := compressor.NewHTTPGzipAdapter()
-	signerService := signerservice.NewSHA256Signer(cfg.SecretKet)
+	var signerService signer.Signer = nil
+	if cfg.SecretKet != "" {
+		signerService = signerservice.NewSHA256Signer(cfg.SecretKet)
+	}
 
 	setupMiddlewares(
 		r,
