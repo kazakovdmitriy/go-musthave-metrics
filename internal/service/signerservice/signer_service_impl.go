@@ -21,5 +21,6 @@ func (s *SHA256Signer) Sign(data []byte) string {
 }
 
 func (s *SHA256Signer) Verify(data []byte, expectedHash string) bool {
-	return s.Sign(data) == expectedHash
+	currentHash := s.Sign(data)
+	return currentHash == expectedHash
 }

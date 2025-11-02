@@ -77,6 +77,7 @@ func (c *Client) shouldCompressRequest(body []byte) bool {
 func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, error) {
 	var reader io.Reader
 	var bodyData []byte
+	var hashValue string
 
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -86,8 +87,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 		bodyData = jsonData
 
 		if c.signer != nil {
-			hashValue := c.signer.Sign(jsonData)
-			c.headers["HashSHA256"] = hashValue
+			hashValue = c.signer.Sign(jsonData)
 		}
 
 		if c.shouldCompressRequest(bodyData) {
@@ -114,6 +114,10 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 
 	if body != nil && c.shouldCompressRequest(bodyData) {
 		req.Header.Set("Content-Encoding", "gzip")
+	}
+
+	if body != nil && c.signer != nil {
+		req.Header.Set("HashSHA256", hashValue)
 	}
 
 	resp, err := c.httpClient.Do(req)
