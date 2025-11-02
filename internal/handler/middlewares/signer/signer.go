@@ -23,6 +23,7 @@ func HashValidationMiddleware(signer Signer) func(next http.Handler) http.Handle
 
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
+				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
@@ -33,11 +34,13 @@ func HashValidationMiddleware(signer Signer) func(next http.Handler) http.Handle
 
 			givenHash := r.Header.Get("HashSHA256")
 			if givenHash == "" {
+				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
 
 			if !signer.Verify(body, givenHash) {
+				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
 				return
 			}
