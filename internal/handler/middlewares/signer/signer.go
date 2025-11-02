@@ -17,7 +17,7 @@ func HashValidationMiddleware(signer Signer) func(next http.Handler) http.Handle
 
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				w.WriteHeader(http.StatusBadRequest)
+				w.WriteHeader(http.StatusNotFound)
 				return
 			}
 			defer r.Body.Close()
@@ -27,12 +27,12 @@ func HashValidationMiddleware(signer Signer) func(next http.Handler) http.Handle
 
 			givenHash := r.Header.Get("HashSHA256")
 			if givenHash == "" {
-				w.WriteHeader(http.StatusBadRequest)
+				w.WriteHeader(http.StatusNotFound)
 				return
 			}
 
 			if !signer.Verify(body, givenHash) {
-				w.WriteHeader(http.StatusBadRequest)
+				w.WriteHeader(http.StatusNotFound)
 				return
 			}
 
