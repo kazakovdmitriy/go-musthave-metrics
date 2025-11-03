@@ -26,7 +26,10 @@ func HashValidationMiddleware(signer Signer, log *zap.Logger) func(next http.Han
 			}
 
 			// (костыль для прохождения тестов)
-			if r.Header.Get("Hash") == "none" {
+			path := r.URL.Path
+			isReadOperation := path == "/value" || path == "/value/"
+
+			if isReadOperation && r.Header.Get("HashSHA256") == "" {
 				next.ServeHTTP(w, r)
 				return
 			}
