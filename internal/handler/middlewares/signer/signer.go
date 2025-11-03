@@ -5,11 +5,21 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+
+	"go.uber.org/zap"
 )
 
-func HashValidationMiddleware(signer Signer) func(next http.Handler) http.Handler {
+func HashValidationMiddleware(signer Signer, log *zap.Logger) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+
+			log.Info("HashValidationMiddleware triggered",
+				zap.String("Hash", r.Header.Get("Hash")),
+				zap.String("HashSHA256", r.Header.Get("HashSHA256")),
+				zap.String("Path", r.URL.Path),
+				zap.String("Method", r.Method),
+			)
+
 			if signer == nil {
 				next.ServeHTTP(w, r)
 				return

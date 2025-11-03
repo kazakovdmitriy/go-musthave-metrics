@@ -72,7 +72,7 @@ func setupMiddlewares(
 	r.Use(middlewares.TrackActiveRequests(activeRequests, shutdownChan))
 	r.Use(compressor.Compress(compressorService, log))
 	if signerService != nil {
-		r.Use(signer.HashValidationMiddleware(signerService))
+		r.Use(signer.HashValidationMiddleware(signerService, log))
 	}
 }
 
