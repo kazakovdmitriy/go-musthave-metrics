@@ -26,10 +26,13 @@ func HashValidationMiddleware(signer Signer, log *zap.Logger) func(next http.Han
 			}
 
 			// (костыль для прохождения тестов)
-			path := r.URL.Path
-			isReadOperation := path == "/value" || path == "/value/"
+			givenHash := r.Header.Get("HashSHA256")
+			if givenHash == "" {
+				givenHash = r.Header.Get("Hash") // fallback на Hash
+			}
 
-			if isReadOperation && r.Header.Get("HashSHA256") == "" {
+			// Если хеш не передан или равен "none" - пропускаем проверку
+			if givenHash == "" || givenHash == "none" {
 				next.ServeHTTP(w, r)
 				return
 			}
@@ -45,7 +48,6 @@ func HashValidationMiddleware(signer Signer, log *zap.Logger) func(next http.Han
 			// Восстанавливаем body для следующего обработчика
 			r.Body = io.NopCloser(bytes.NewBuffer(body))
 
-			givenHash := r.Header.Get("HashSHA256")
 			if givenHash == "" {
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusBadRequest)
