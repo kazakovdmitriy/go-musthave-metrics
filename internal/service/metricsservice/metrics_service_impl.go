@@ -20,13 +20,11 @@ func NewMetricService(storage service.Storage) *metricsService {
 }
 
 func (s *metricsService) UpdateGauge(ctx context.Context, name string, value float64) error {
-	s.storage.UpdateGauge(ctx, name, value)
-	return nil
+	return s.storage.UpdateGauge(ctx, name, value)
 }
 
 func (s *metricsService) UpdateCounter(ctx context.Context, name string, value int64) error {
-	s.storage.UpdateCounter(ctx, name, value)
-	return nil
+	return s.storage.UpdateCounter(ctx, name, value)
 }
 
 func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {

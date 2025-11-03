@@ -199,7 +199,7 @@ func (h *MetricsHandler) updateMetricByType(
 				zap.String("metric_name", metricName),
 				zap.Float64("metric_value", parsedValue),
 				zap.Error(err))
-			http.Error(w, "failed to update gauge metric", http.StatusInternalServerError)
+			http.Error(w, "failed to update gauge metric", http.StatusNotFound)
 			return err
 		}
 
@@ -220,7 +220,7 @@ func (h *MetricsHandler) updateMetricByType(
 				zap.String("metric_name", metricName),
 				zap.Int64("metric_value", parsedValue),
 				zap.Error(err))
-			http.Error(w, "failed to update counter metric", http.StatusInternalServerError)
+			http.Error(w, "failed to update counter metric", http.StatusNotFound)
 			return err
 		}
 
@@ -267,7 +267,7 @@ func (h *MetricsHandler) updateMetricFromJSON(
 				zap.String("metric_name", metricName),
 				zap.Float64("metric_value", *data.Value),
 				zap.Error(err))
-			http.Error(w, "failed to update gauge metric", http.StatusInternalServerError)
+			http.Error(w, "failed to update gauge metric", http.StatusNotFound)
 			return err
 		}
 
@@ -285,7 +285,7 @@ func (h *MetricsHandler) updateMetricFromJSON(
 				zap.String("metric_name", metricName),
 				zap.Int64("metric_delta", *data.Delta),
 				zap.Error(err))
-			http.Error(w, "failed to update counter metric", http.StatusInternalServerError)
+			http.Error(w, "failed to update counter metric", http.StatusNotFound)
 			return err
 		}
 	}

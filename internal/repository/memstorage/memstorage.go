@@ -52,13 +52,14 @@ func NewMemStorage(cfg *config.ServerFlags, log *zap.Logger) service.Storage {
 	return storage
 }
 
-func (m *memStorage) UpdateGauge(ctx context.Context, name string, value float64) {
+func (m *memStorage) UpdateGauge(ctx context.Context, name string, value float64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.gauges[name] = value
+	return nil
 }
 
-func (m *memStorage) UpdateCounter(ctx context.Context, name string, value int64) {
+func (m *memStorage) UpdateCounter(ctx context.Context, name string, value int64) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	if existing, exists := m.counters[name]; exists {
@@ -67,6 +68,7 @@ func (m *memStorage) UpdateCounter(ctx context.Context, name string, value int64
 	} else {
 		m.counters[name] = value
 	}
+	return nil
 }
 
 func (m *memStorage) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {
