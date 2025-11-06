@@ -27,7 +27,6 @@ type Server struct {
 }
 
 func NewApp(cfg *config.ServerFlags, log *zap.Logger) (*Server, error) {
-	// storage := memstorage.NewMemStorage(cfg, log)
 	app := &Server{
 		cfg: cfg,
 		log: log,
@@ -44,7 +43,7 @@ func (a *Server) Run() error {
 
 	storage := a.storageInitializer(ctx)
 
-	handler, err := handler.SetupHandler(
+	router, err := handler.SetupHandler(
 		storage,
 		&activeRequests,
 		a.log,
@@ -52,12 +51,12 @@ func (a *Server) Run() error {
 		*a.cfg,
 	)
 	if err != nil {
-		return fmt.Errorf("handler initialization error: %w", err)
+		return fmt.Errorf("router initialization error: %w", err)
 	}
 
 	a.server = &http.Server{
 		Addr:    a.cfg.ServerAddr,
-		Handler: handler,
+		Handler: router,
 	}
 
 	go func() {
@@ -108,7 +107,9 @@ func (a *Server) Run() error {
 
 func (a *Server) Close() {
 	if a.storage != nil {
-		a.storage.Close()
+		if err := a.storage.Close(); err != nil {
+			a.log.Error("storage close failed", zap.Error(err))
+		}
 	}
 }
 

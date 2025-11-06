@@ -16,6 +16,7 @@ type ServerFlags struct {
 	Restore         bool   `env:"RESTORE"`
 	DatabaseDSN     string `env:"DATABASE_DSN"`
 	SecretKet       string `env:"KEY"`
+	RateLimit       int    `env:"RATE_LIMIT"`
 }
 
 func ParseServerConfig() *ServerFlags {
@@ -48,12 +49,13 @@ func parseServerFlag(cfg *ServerFlags) {
 	flags := pflag.NewFlagSet("server", pflag.ExitOnError)
 
 	flags.StringVarP(&cfg.ServerAddr, "address", "a", ":8080", "HTTP server port")
-	flags.StringVarP(&cfg.LogLevel, "loglevel", "l", "info", "Logger level")
+	flags.StringVarP(&cfg.LogLevel, "loglevel", "g", "info", "Logger level")
 	flags.IntVarP(&cfg.StoreInterval, "strIntrvl", "i", 300, "Disc save interval, s")
 	flags.StringVarP(&cfg.FileStoragePath, "filePath", "f", "metrics.json", "Path to file to save metrics")
 	flags.BoolVarP(&cfg.Restore, "restore", "r", false, "Load metrics on start")
 	flags.StringVarP(&cfg.DatabaseDSN, "database_dsn", "d", "", "DSN string for db connection")
 	flags.StringVarP(&cfg.SecretKet, "", "k", "", "Secret key")
+	flags.IntVarP(&cfg.RateLimit, "ratelimit", "l", 0, "Rate limit")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		log.Printf("Error parsing command-line flags: %v", err)

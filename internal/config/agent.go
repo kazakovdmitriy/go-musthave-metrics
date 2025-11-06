@@ -13,7 +13,8 @@ type AgentFlags struct {
 	ReportInterval  int    `env:"REPORT_INTERVAL"`
 	PollingInterval int    `env:"POLL_INTERVAL"`
 	LogLevel        string `env:"LOGLEVEL" envDefault:"info"`
-	SecretKet       string `env:"KEY"`
+	SecretKey       string `env:"KEY"`
+	RateLimit       int    `env:"RATE_LIMIT"`
 }
 
 func ParseAgentConfig() *AgentFlags {
@@ -50,10 +51,14 @@ func parseFlagsAgent(cfg *AgentFlags) {
 	flags.StringVarP(&cfg.ServerAddr, "address", "a", "http://localhost:8080", "HTTP server port")
 	flags.IntVarP(&cfg.ReportInterval, "report", "r", 10, "report interval in sec")
 	flags.IntVarP(&cfg.PollingInterval, "poll", "p", 2, "polling interval in sec")
-	flags.StringVarP(&cfg.SecretKet, "", "k", "", "Secret key")
+	flags.StringVarP(&cfg.SecretKey, "", "k", "", "Secret key")
+	flags.IntVarP(&cfg.RateLimit, "ratelimit", "l", 0, "Rate limit")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
-		fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		_, err := fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+		if err != nil {
+			return
+		}
 		os.Exit(1)
 	}
 
@@ -62,7 +67,10 @@ func parseFlagsAgent(cfg *AgentFlags) {
 		for i := 0; i < flags.NArg(); i++ {
 			arg := flags.Arg(i)
 			if len(arg) > 0 && arg[0] == '-' {
-				fmt.Fprintf(os.Stderr, "Error: unknown flag: %s\n", arg)
+				_, err := fmt.Fprintf(os.Stderr, "Error: unknown flag: %s\n", arg)
+				if err != nil {
+					return
+				}
 				os.Exit(1)
 			}
 		}

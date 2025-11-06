@@ -1,5 +1,8 @@
-package agent
+package model
 
+import "fmt"
+
+// MemoryMetrics представляет метрики памяти
 type MemoryMetrics struct {
 	Alloc         float64 `json:"alloc"`
 	BuckHashSys   float64 `json:"buck_hash_sys"`
@@ -29,10 +32,15 @@ type MemoryMetrics struct {
 	Sys           float64 `json:"sys"`
 	TotalAlloc    float64 `json:"total_alloc"`
 	RandomValue   float64 `json:"random_value,omitempty"`
+
+	TotalMemory    float64   `json:"total_memory"`
+	FreeMemory     float64   `json:"free_memory"`
+	CPUutilization []float64 `json:"cpu_utilization"`
 }
 
+// ToMap преобразует метрики в map
 func (m MemoryMetrics) ToMap() map[string]float64 {
-	return map[string]float64{
+	result := map[string]float64{
 		"Alloc":         m.Alloc,
 		"BuckHashSys":   m.BuckHashSys,
 		"Frees":         m.Frees,
@@ -61,5 +69,35 @@ func (m MemoryMetrics) ToMap() map[string]float64 {
 		"Sys":           m.Sys,
 		"TotalAlloc":    m.TotalAlloc,
 		"RandomValue":   m.RandomValue,
+		"TotalMemory":   m.TotalMemory,
+		"FreeMemory":    m.FreeMemory,
 	}
+
+	// Добавляем метрики CPU
+	for i, utilization := range m.CPUutilization {
+		result[fmt.Sprintf("CPUutilization%d", i+1)] = utilization
+	}
+
+	return result
+}
+
+// String возвращает строковое представление метрик
+func (m MemoryMetrics) String() string {
+	return fmt.Sprintf("MemoryMetrics{Alloc: %.2f, HeapAlloc: %.2f, Sys: %.2f}",
+		m.Alloc, m.HeapAlloc, m.Sys)
+}
+
+// IsZero проверяет являются ли метрики нулевыми
+func (m MemoryMetrics) IsZero() bool {
+	return m.Alloc == 0 && m.Sys == 0 && m.TotalAlloc == 0
+}
+
+// Clone создает глубокую копию метрик
+func (m MemoryMetrics) Clone() MemoryMetrics {
+	clone := m
+	if m.CPUutilization != nil {
+		clone.CPUutilization = make([]float64, len(m.CPUutilization))
+		copy(clone.CPUutilization, m.CPUutilization)
+	}
+	return clone
 }

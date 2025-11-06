@@ -39,7 +39,10 @@ func NewMemStorage(cfg *config.ServerFlags, log *zap.Logger) service.Storage {
 	}
 
 	if cfg.Restore {
-		storage.LoadFromFile(cfg.FileStoragePath)
+		err := storage.LoadFromFile(cfg.FileStoragePath)
+		if err != nil {
+			return nil
+		}
 	}
 
 	if cfg.StoreInterval > 0 {
@@ -253,6 +256,7 @@ func (m *memStorage) Close() error {
 	}
 
 	if err := m.SaveToFile(m.cfg.FileStoragePath); err != nil {
+
 		return fmt.Errorf("failed to save on close: %w", err)
 	}
 
