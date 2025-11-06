@@ -19,12 +19,7 @@ func main() {
 	if err != nil {
 		log.Fatal(err.Error())
 	}
-	defer func(logg *zap.Logger) {
-		err := logg.Sync()
-		if err != nil {
-
-		}
-	}(logg)
+	defer logg.Sync()
 
 	app := agent.NewAppWithConfig(cfg, logg)
 

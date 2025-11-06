@@ -94,6 +94,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 	if err != nil {
 		return nil, fmt.Errorf("executing request failed: %w", err)
 	}
+	defer resp.Body.Close()
 
 	responseBody, err := c.responseProcessor.ProcessResponse(resp)
 	if err != nil {

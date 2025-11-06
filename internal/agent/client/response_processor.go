@@ -13,12 +13,7 @@ type ResponseProcessor struct{}
 
 // ProcessResponse обрабатывает тело ответа
 func (rp *ResponseProcessor) ProcessResponse(resp *http.Response) ([]byte, error) {
-	defer func(Body io.ReadCloser) {
-		err := Body.Close()
-		if err != nil {
-
-		}
-	}(resp.Body)
+	defer resp.Body.Close()
 
 	rawBody, err := io.ReadAll(resp.Body)
 	if err != nil {
