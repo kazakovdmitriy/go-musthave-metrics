@@ -23,13 +23,11 @@ type App struct {
 	logger    *zap.Logger
 	collector interfaces.MetricsCollector
 	reporter  interfaces.MetricsReporter
-	ctx       context.Context
-	cancel    context.CancelFunc
 	wg        sync.WaitGroup
 }
 
 // Initialize создает и настраивает все компоненты приложения
-func (a *App) Initialize() error {
+func (a *App) Initialize(ctx context.Context) error {
 	a.logger.Info("initializing agent",
 		zap.Int("rate_limit", a.config.RateLimit),
 		zap.Bool("rate_limiting_enabled", a.config.RateLimit > 0),
@@ -55,7 +53,7 @@ func (a *App) Initialize() error {
 	pollingInterval := time.Duration(a.config.PollingInterval) * time.Second
 	reportInterval := time.Duration(a.config.ReportInterval) * time.Second
 
-	a.collector = collector.NewMetricsCollector(a.ctx, pollingInterval, a.logger, providers)
+	a.collector = collector.NewMetricsCollector(ctx, pollingInterval, a.logger, providers)
 
 	var metricsSender interfaces.MetricsSender
 
@@ -83,36 +81,40 @@ func (a *App) Initialize() error {
 	}
 
 	// Создаем репортер
-	a.reporter = reporter.NewMetricsReporter(a.ctx, a.collector, metricsSender, reportInterval, a.logger)
+	a.reporter = reporter.NewMetricsReporter(ctx, a.collector, metricsSender, reportInterval, a.logger)
 
 	return nil
 }
 
 // NewAppWithConfig создает новое приложение и инициализирует его
-func NewAppWithConfig(cfg *config.AgentFlags, logger *zap.Logger) *App {
+func NewAppWithConfig(ctx context.Context, cfg *config.AgentFlags, logger *zap.Logger) *App {
 	app := NewApp(cfg, nil, nil, logger)
-	if err := app.Initialize(); err != nil {
+	if err := app.Initialize(ctx); err != nil {
+
 		logger.Fatal("failed to initialize app", zap.Error(err))
 	}
 	return app
 }
 
 // NewApp создает новое приложение агента
-func NewApp(cfg *config.AgentFlags, collector interfaces.MetricsCollector, reporter interfaces.MetricsReporter, logger *zap.Logger) *App {
-	ctx, cancel := context.WithCancel(context.Background())
-
+func NewApp(
+	cfg *config.AgentFlags,
+	collector interfaces.MetricsCollector,
+	reporter interfaces.MetricsReporter,
+	logger *zap.Logger,
+) *App {
 	return &App{
 		config:    cfg,
 		logger:    logger,
 		collector: collector,
 		reporter:  reporter,
-		ctx:       ctx,
-		cancel:    cancel,
 	}
 }
 
 // Run запускает приложение
-func (a *App) Run() {
+func (a *App) Run(ctx context.Context) {
+	a.logger.Info("starting agent components...")
+
 	a.collector.Start()
 	a.reporter.Start()
 
@@ -122,24 +124,22 @@ func (a *App) Run() {
 		zap.Int("report_interval", a.config.ReportInterval),
 		zap.Int("rate_limit", a.config.RateLimit),
 	)
+
+	<-ctx.Done()
+	a.logger.Info("received shutdown signal, stopping agent...")
 }
 
-// Stop останавливает приложение
-func (a *App) Stop() {
-	a.logger.Info("shutting down agent gracefully...")
-
-	a.cancel()
+// Wait останавливает приложение
+func (a *App) Wait() {
+	a.logger.Info("waiting for agent components to stop...")
 
 	if a.collector != nil {
 		a.collector.Stop()
 	}
 
-	a.wg.Wait()
+	if a.reporter != nil {
+		a.reporter.Stop()
+	}
 
 	a.logger.Info("agent shutdown completed")
-}
-
-// GetContext возвращает контекст приложения
-func (a *App) GetContext() context.Context {
-	return a.ctx
 }

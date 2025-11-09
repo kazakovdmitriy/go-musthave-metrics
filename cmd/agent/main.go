@@ -1,15 +1,13 @@
 package main
 
 import (
-	"log"
-	"os"
-	"os/signal"
-	"syscall"
-
+	"context"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
-	"go.uber.org/zap"
+	"log"
+	"os/signal"
+	"syscall"
 )
 
 func main() {
@@ -21,17 +19,13 @@ func main() {
 	}
 	defer logg.Sync()
 
-	app := agent.NewAppWithConfig(cfg, logg)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
 
-	app.Run()
-	defer app.Stop()
+	app := agent.NewAppWithConfig(ctx, cfg, logg)
 
-	waitForShutdown(logg)
-}
+	app.Run(ctx)
+	app.Wait()
 
-func waitForShutdown(logger *zap.Logger) {
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, syscall.SIGINT, syscall.SIGTERM)
-	<-sigChan
-	logger.Info("received interrupt signal, shutting down...")
+	logg.Info("application shutdown complete")
 }
