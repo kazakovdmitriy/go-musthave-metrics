@@ -8,7 +8,6 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
 	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
 	"io"
-	"log"
 )
 
 // RequestProcessor обрабатывает запросы (подпись, сжатие)
@@ -20,11 +19,9 @@ type RequestProcessor struct {
 }
 
 // NewRequestProcessor создает новый процессор запросов
-func NewRequestProcessor(signer signer.Signer, useGzip bool, compressionLevel int) *RequestProcessor {
+func NewRequestProcessor(signer signer.Signer, useGzip bool, compressionLevel int) (*RequestProcessor, error) {
 	if compressionLevel < gzip.DefaultCompression || compressionLevel > gzip.BestCompression {
-		compressionLevel = gzip.DefaultCompression
-		log.Printf("Compression level %d is out of valid range [%d, %d], using default level %d",
-			compressionLevel, gzip.DefaultCompression, gzip.BestCompression, gzip.DefaultCompression)
+		return nil, fmt.Errorf("compression level %d is out of valid range [%d, %d]", compressionLevel, gzip.DefaultCompression, gzip.BestCompression)
 	}
 
 	return &RequestProcessor{
@@ -32,7 +29,7 @@ func NewRequestProcessor(signer signer.Signer, useGzip bool, compressionLevel in
 		useGzip:           useGzip,
 		compressionLevel:  compressionLevel,
 		minSizeToCompress: 32,
-	}
+	}, nil
 }
 
 // ProcessRequest обрабатывает тело запроса

@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"golang.org/x/sync/semaphore"
 	"net/http"
 	"strings"
 	"time"
@@ -24,7 +23,6 @@ type Client struct {
 	requestProcessor  *RequestProcessor
 	responseProcessor *ResponseProcessor
 	logger            *zap.Logger
-	semaphore         *semaphore.Weighted
 	cfg               *config.AgentFlags
 }
 
@@ -34,19 +32,12 @@ func NewClient(
 	signer signer.Signer,
 	logger *zap.Logger,
 	cfg *config.AgentFlags,
-) interfaces.HTTPClient {
+) (interfaces.HTTPClient, error) {
 	baseURL = normalizeURL(baseURL)
 
-	var sem *semaphore.Weighted
-	if cfg.RateLimit > 0 {
-		sem = semaphore.NewWeighted(int64(cfg.RateLimit))
-		logger.Info("client semaphore initialized",
-			zap.Int("rate_limit", cfg.RateLimit),
-		)
-	} else if cfg.RateLimit == 0 {
-		logger.Info("rate limiting disabled")
-	} else {
-		logger.Warn("invalid rate limit, using unlimited mode", zap.Int("rate_limit", cfg.RateLimit))
+	requestProcessor, err := NewRequestProcessor(signer, true, gzip.DefaultCompression)
+	if err != nil {
+		return nil, err
 	}
 
 	return &Client{
@@ -55,12 +46,11 @@ func NewClient(
 			Timeout: time.Second * 20,
 		},
 		headers:           make(map[string]string),
-		requestProcessor:  NewRequestProcessor(signer, true, gzip.DefaultCompression),
+		requestProcessor:  requestProcessor,
 		responseProcessor: &ResponseProcessor{},
 		logger:            logger,
-		semaphore:         sem,
 		cfg:               cfg,
-	}
+	}, nil
 }
 
 // normalizeURL нормализует URL
@@ -77,11 +67,6 @@ func normalizeURL(url string) string {
 // SetHeader устанавливает заголовок
 func (c *Client) SetHeader(key, value string) {
 	c.headers[key] = value
-}
-
-// SetCompression настраивает сжатие
-func (c *Client) SetCompression(useGzip bool, level int) {
-	c.requestProcessor = NewRequestProcessor(c.requestProcessor.signer, useGzip, level)
 }
 
 // doRequest выполняет HTTP запрос
@@ -136,14 +121,6 @@ func (c *Client) setRequestHeaders(req *http.Request, bodyData []byte, hashValue
 
 // doRequestWithRetry выполняет запрос с ограничением или без
 func (c *Client) doRequestWithRetry(ctx context.Context, method, endpoint string, body interface{}) ([]byte, error) {
-	// Ограничиваем количество одновременных запросов только если семафор включен
-	if c.semaphore != nil {
-		if err := c.semaphore.Acquire(ctx, 1); err != nil {
-			return nil, fmt.Errorf("failed to acquire semaphore: %w", err)
-		}
-		defer c.semaphore.Release(1)
-	}
-
 	var response []byte
 
 	retryDelays, err := c.cfg.GetRetryDelaysAsDuration()

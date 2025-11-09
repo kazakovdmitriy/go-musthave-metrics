@@ -22,7 +22,10 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
-	app := agent.NewAppWithConfig(ctx, cfg, logg)
+	app, err := agent.NewAppWithConfig(ctx, cfg, logg)
+	if err != nil {
+		log.Fatal(err.Error())
+	}
 
 	app.Run(ctx)
 	app.Wait()

@@ -13,7 +13,7 @@ import (
 // metricsCollector отвечает за сбор метрик
 type metricsCollector struct {
 	metrics   model.MemoryMetrics
-	mutex     sync.RWMutex
+	mutex     sync.Mutex
 	pollCount int
 	ticker    *time.Ticker
 	logger    *zap.Logger
@@ -172,8 +172,8 @@ func (mc *metricsCollector) mergeMetrics(newMetrics model.MemoryMetrics) {
 
 // GetMetrics возвращает текущие метрики и счетчик
 func (mc *metricsCollector) GetMetrics() (model.MemoryMetrics, int) {
-	mc.mutex.RLock()
-	defer mc.mutex.RUnlock()
+	mc.mutex.Lock()
+	defer mc.mutex.Unlock()
 
 	return mc.metrics.Clone(), mc.pollCount
 }

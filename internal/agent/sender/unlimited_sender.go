@@ -1,3 +1,4 @@
+// sender/unlimited_sender.go
 package sender
 
 import (
@@ -11,16 +12,16 @@ import (
 
 // unlimitedSender отправляет метрики без ограничений (без worker pool)
 type unlimitedSender struct {
-	client interfaces.HTTPClient
-	logger *zap.Logger
-	wg     sync.WaitGroup
+	metricsService *metricsService
+	logger         *zap.Logger
+	wg             sync.WaitGroup
 }
 
-// NewUnlimitedSender создает неограниченный отправитель
-func NewUnlimitedSender(client interfaces.HTTPClient, logger *zap.Logger) interfaces.MetricsSender {
+// newUnlimitedSender создает неограниченный отправитель
+func newUnlimitedSender(client interfaces.HTTPClient, logger *zap.Logger) interfaces.MetricsSender {
 	return &unlimitedSender{
-		client: client,
-		logger: logger,
+		metricsService: newMetricsService(client, logger),
+		logger:         logger,
 	}
 }
 
@@ -36,7 +37,7 @@ func (us *unlimitedSender) Send(
 	go func() {
 		defer us.wg.Done()
 
-		err := us.sendMetrics(metrics, deltaCounter)
+		err := us.metricsService.send(ctx, metrics, deltaCounter)
 		if err != nil {
 			us.logger.Error("failed to send metrics in unlimited mode", zap.Error(err))
 		} else {
@@ -52,56 +53,4 @@ func (us *unlimitedSender) Stop() {
 	us.logger.Info("waiting for all unlimited sends to complete...")
 	us.wg.Wait()
 	us.logger.Info("all unlimited sends completed")
-}
-
-// sendMetrics содержит логику отправки метрик
-func (us *unlimitedSender) sendMetrics(metrics model.MemoryMetrics, deltaCounter int64) error {
-	metricsMap := metrics.ToMap()
-
-	if len(metricsMap) == 0 && deltaCounter == 0 {
-		us.logger.Info("no metrics to send")
-		return nil
-	}
-
-	var batch []model.Metrics
-
-	for name, value := range metricsMap {
-		valueCopy := value
-		batch = append(batch, model.Metrics{
-			ID:    name,
-			MType: model.Gauge,
-			Value: &valueCopy,
-		})
-	}
-
-	if deltaCounter != 0 {
-		deltaCopy := deltaCounter
-		batch = append(batch, model.Metrics{
-			ID:    "PollCount",
-			MType: model.Counter,
-			Delta: &deltaCopy,
-		})
-	}
-
-	if len(batch) == 0 {
-		us.logger.Info("no metrics to send after filtering")
-		return nil
-	}
-
-	_, err := us.client.Post(context.Background(), "/updates/", batch)
-	if err != nil {
-		us.logger.Error(
-			"failed to send metrics batch",
-			zap.Int("metrics_count", len(batch)),
-			zap.Error(err),
-		)
-		return err
-	}
-
-	us.logger.Debug(
-		"successfully sent metrics batch",
-		zap.Int("metrics_count", len(batch)),
-	)
-
-	return nil
 }

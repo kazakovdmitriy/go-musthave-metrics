@@ -1,42 +1,47 @@
+// sender/sender.go
 package sender
 
 import (
 	"context"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
-
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"go.uber.org/zap"
 )
 
 // metricsSender отправляет метрики на сервер используя worker pool
 type metricsSender struct {
-	workerPool *WorkerPool
+	workerPool     *WorkerPool
+	metricsService *metricsService
 }
 
 // NewMetricsSender создает новый отправитель метрик
 func NewMetricsSender(client interfaces.HTTPClient, workers int, queueSize int, logger *zap.Logger) interfaces.MetricsSender {
-	// Если workers = 0, используем неограниченный режим
 	if workers <= 0 {
 		logger.Info("creating unlimited sender (no worker pool)")
-		return NewUnlimitedSender(client, logger)
+		return newUnlimitedSender(client, logger)
 	}
 
-	workerPool := NewWorkerPool(client, workers, queueSize, logger)
+	metricsService := newMetricsService(client, logger)
+
+	workerPool := NewWorkerPool(workers, queueSize, logger)
 	workerPool.Start()
 
 	return &metricsSender{
-		workerPool: workerPool,
+		workerPool:     workerPool,
+		metricsService: metricsService,
 	}
 }
 
 // Send отправляет метрики на сервер через worker pool
 func (ms *metricsSender) Send(ctx context.Context, metrics model.MemoryMetrics, deltaCounter int64, logger *zap.Logger) error {
-	task := SendTask{
-		Metrics: metrics,
-		Count:   deltaCounter,
+	task := func() error {
+		return ms.metricsService.send(ctx, metrics, deltaCounter)
 	}
 
-	ms.workerPool.Submit(task)
+	submitted := ms.workerPool.Submit(task)
+	if !submitted {
+		logger.Warn("failed to submit metrics task to worker pool")
+	}
 	return nil
 }
 

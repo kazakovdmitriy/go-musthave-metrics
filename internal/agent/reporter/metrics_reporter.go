@@ -20,7 +20,13 @@ type metricsReporter struct {
 }
 
 // NewMetricsReporter создает новый репортер метрик
-func NewMetricsReporter(ctx context.Context, collector interfaces.MetricsCollector, sender interfaces.MetricsSender, reportInterval time.Duration, logger *zap.Logger) interfaces.MetricsReporter {
+func NewMetricsReporter(
+	ctx context.Context,
+	collector interfaces.MetricsCollector,
+	sender interfaces.MetricsSender,
+	reportInterval time.Duration,
+	logger *zap.Logger,
+) interfaces.MetricsReporter {
 	return &metricsReporter{
 		sender:    sender,
 		ticker:    time.NewTicker(reportInterval),

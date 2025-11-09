@@ -1,6 +1,9 @@
 package model
 
-import "fmt"
+import (
+	"fmt"
+	"strconv"
+)
 
 // MemoryMetrics представляет метрики памяти
 type MemoryMetrics struct {
@@ -83,8 +86,9 @@ func (m MemoryMetrics) ToMap() map[string]float64 {
 
 // String возвращает строковое представление метрик
 func (m MemoryMetrics) String() string {
-	return fmt.Sprintf("MemoryMetrics{Alloc: %.2f, HeapAlloc: %.2f, Sys: %.2f}",
-		m.Alloc, m.HeapAlloc, m.Sys)
+	return "MemoryMetrics{Alloc: " + strconv.FormatFloat(m.Alloc, 'f', 2, 64) +
+		", HeapAlloc: " + strconv.FormatFloat(m.HeapAlloc, 'f', 2, 64) +
+		", Sys: " + strconv.FormatFloat(m.Sys, 'f', 2, 64) + "}"
 }
 
 // IsZero проверяет являются ли метрики нулевыми

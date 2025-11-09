@@ -2,6 +2,7 @@ package agent
 
 import (
 	"context"
+	"fmt"
 	"sync"
 	"time"
 
@@ -38,12 +39,15 @@ func (a *App) Initialize(ctx context.Context) error {
 		signerService = signerservice.NewSHA256Signer(a.config.SecretKey)
 	}
 
-	httpClient := client.NewClient(
+	httpClient, err := client.NewClient(
 		a.config.ServerAddr,
 		signerService,
 		a.logger,
 		a.config,
 	)
+	if err != nil {
+		return err
+	}
 
 	providers := []interfaces.MetricsProvider{
 		provider.NewRuntimeMetricsProvider(),
@@ -87,13 +91,16 @@ func (a *App) Initialize(ctx context.Context) error {
 }
 
 // NewAppWithConfig создает новое приложение и инициализирует его
-func NewAppWithConfig(ctx context.Context, cfg *config.AgentFlags, logger *zap.Logger) *App {
+func NewAppWithConfig(
+	ctx context.Context,
+	cfg *config.AgentFlags,
+	logger *zap.Logger,
+) (*App, error) {
 	app := NewApp(cfg, nil, nil, logger)
 	if err := app.Initialize(ctx); err != nil {
-
-		logger.Fatal("failed to initialize app", zap.Error(err))
+		return nil, fmt.Errorf("failed to initialize app: %w", err)
 	}
-	return app
+	return app, nil
 }
 
 // NewApp создает новое приложение агента

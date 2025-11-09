@@ -2,8 +2,6 @@ package sender
 
 import (
 	"context"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -11,10 +9,12 @@ import (
 	"go.uber.org/zap"
 )
 
-// WorkerPool управляет пулом воркеров для отправки метрик
+// Task - функция для выполнения воркером
+type Task func() error
+
+// WorkerPool управляет пулом воркеров для ЛЮБЫХ задач
 type WorkerPool struct {
-	client         interfaces.HTTPClient
-	tasks          chan SendTask
+	tasks          chan Task
 	wg             sync.WaitGroup
 	logger         *zap.Logger
 	ctx            context.Context
@@ -27,12 +27,11 @@ type WorkerPool struct {
 }
 
 // NewWorkerPool создает новый пул воркеров
-func NewWorkerPool(client interfaces.HTTPClient, workers int, queueSize int, logger *zap.Logger) *WorkerPool {
+func NewWorkerPool(workers int, queueSize int, logger *zap.Logger) *WorkerPool {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &WorkerPool{
-		client:    client,
-		tasks:     make(chan SendTask, queueSize),
+		tasks:     make(chan Task, queueSize),
 		logger:    logger,
 		ctx:       ctx,
 		cancel:    cancel,
@@ -66,16 +65,8 @@ func (wp *WorkerPool) Stop() {
 	)
 }
 
-// GetStats возвращает статистику пула
-func (wp *WorkerPool) GetStats() (activeWorkers int, queueLength int, droppedTasks uint64, processedTasks uint64) {
-	return int(atomic.LoadInt32(&wp.activeWorkers)),
-		len(wp.tasks),
-		atomic.LoadUint64(&wp.droppedTasks),
-		atomic.LoadUint64(&wp.processedTasks)
-}
-
 // Submit добавляет задачу в очередь
-func (wp *WorkerPool) Submit(task SendTask) bool {
+func (wp *WorkerPool) Submit(task Task) bool {
 	select {
 	case wp.tasks <- task:
 		return true
@@ -87,7 +78,7 @@ func (wp *WorkerPool) Submit(task SendTask) bool {
 
 		if atomic.LoadUint64(&wp.droppedTasks)%100 == 1 {
 			active, queue, dropped, processed := wp.GetStats()
-			wp.logger.Warn("worker pool queue is full, dropping metrics batch",
+			wp.logger.Warn("worker pool queue is full, dropping task",
 				zap.Int("active_workers", active),
 				zap.Int("queue_length", queue),
 				zap.Uint64("dropped_tasks", dropped),
@@ -96,6 +87,14 @@ func (wp *WorkerPool) Submit(task SendTask) bool {
 		}
 		return false
 	}
+}
+
+// GetStats возвращает статистику пула
+func (wp *WorkerPool) GetStats() (activeWorkers int, queueLength int, droppedTasks uint64, processedTasks uint64) {
+	return int(atomic.LoadInt32(&wp.activeWorkers)),
+		len(wp.tasks),
+		atomic.LoadUint64(&wp.droppedTasks),
+		atomic.LoadUint64(&wp.processedTasks)
 }
 
 // worker обрабатывает задачи из очереди
@@ -114,26 +113,21 @@ func (wp *WorkerPool) worker(id int) {
 
 			atomic.AddInt32(&wp.activeWorkers, 1)
 
-			wp.logger.Debug("worker processing task",
-				zap.Int("worker_id", id),
-				zap.Int("metrics_count", len(task.Metrics.ToMap())),
-			)
-
 			start := time.Now()
-			err := wp.sendMetrics(task.Metrics, task.Count)
+			err := task()
 			duration := time.Since(start)
 
 			atomic.AddInt32(&wp.activeWorkers, -1)
 			atomic.AddUint64(&wp.processedTasks, 1)
 
 			if err != nil {
-				wp.logger.Error("failed to send metrics",
+				wp.logger.Error("task execution failed",
 					zap.Int("worker_id", id),
 					zap.Duration("duration", duration),
 					zap.Error(err),
 				)
 			} else {
-				wp.logger.Debug("metrics sent successfully",
+				wp.logger.Debug("task completed successfully",
 					zap.Int("worker_id", id),
 					zap.Duration("duration", duration),
 				)
@@ -144,56 +138,4 @@ func (wp *WorkerPool) worker(id int) {
 			return
 		}
 	}
-}
-
-// sendMetrics отправляет метрики на сервер
-func (wp *WorkerPool) sendMetrics(metrics model.MemoryMetrics, deltaCounter int64) error {
-	metricsMap := metrics.ToMap()
-
-	if len(metricsMap) == 0 && deltaCounter == 0 {
-		wp.logger.Info("no metrics to send")
-		return nil
-	}
-
-	var batch []model.Metrics
-
-	for name, value := range metricsMap {
-		valueCopy := value
-		batch = append(batch, model.Metrics{
-			ID:    name,
-			MType: model.Gauge,
-			Value: &valueCopy,
-		})
-	}
-
-	if deltaCounter != 0 {
-		deltaCopy := deltaCounter
-		batch = append(batch, model.Metrics{
-			ID:    "PollCount",
-			MType: model.Counter,
-			Delta: &deltaCopy,
-		})
-	}
-
-	if len(batch) == 0 {
-		wp.logger.Info("no metrics to send after filtering")
-		return nil
-	}
-
-	_, err := wp.client.Post(wp.ctx, "/updates/", batch)
-	if err != nil {
-		wp.logger.Error(
-			"failed to send metrics batch",
-			zap.Int("metrics_count", len(batch)),
-			zap.Error(err),
-		)
-		return err
-	}
-
-	wp.logger.Debug(
-		"successfully sent metrics batch",
-		zap.Int("metrics_count", len(batch)),
-	)
-
-	return nil
 }
