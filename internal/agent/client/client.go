@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"golang.org/x/sync/semaphore"
 	"net/http"
 	"strings"
@@ -24,22 +25,28 @@ type Client struct {
 	responseProcessor *ResponseProcessor
 	logger            *zap.Logger
 	semaphore         *semaphore.Weighted
+	cfg               *config.AgentFlags
 }
 
 // NewClient создает новый клиент с ограничением или без
-func NewClient(baseURL string, signer signer.Signer, logger *zap.Logger, rateLimit int) interfaces.HTTPClient {
+func NewClient(
+	baseURL string,
+	signer signer.Signer,
+	logger *zap.Logger,
+	cfg *config.AgentFlags,
+) interfaces.HTTPClient {
 	baseURL = normalizeURL(baseURL)
 
 	var sem *semaphore.Weighted
-	if rateLimit > 0 {
-		sem = semaphore.NewWeighted(int64(rateLimit))
+	if cfg.RateLimit > 0 {
+		sem = semaphore.NewWeighted(int64(cfg.RateLimit))
 		logger.Info("client semaphore initialized",
-			zap.Int("rate_limit", rateLimit),
+			zap.Int("rate_limit", cfg.RateLimit),
 		)
-	} else if rateLimit == 0 {
+	} else if cfg.RateLimit == 0 {
 		logger.Info("rate limiting disabled")
 	} else {
-		logger.Warn("invalid rate limit, using unlimited mode", zap.Int("rate_limit", rateLimit))
+		logger.Warn("invalid rate limit, using unlimited mode", zap.Int("rate_limit", cfg.RateLimit))
 	}
 
 	return &Client{
@@ -52,6 +59,7 @@ func NewClient(baseURL string, signer signer.Signer, logger *zap.Logger, rateLim
 		responseProcessor: &ResponseProcessor{},
 		logger:            logger,
 		semaphore:         sem,
+		cfg:               cfg,
 	}
 }
 
@@ -101,7 +109,7 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 		return nil, err
 	}
 
-	if resp.StatusCode >= 400 {
+	if resp.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("request failed with status %d: %s", resp.StatusCode, string(responseBody))
 	}
 
@@ -138,15 +146,20 @@ func (c *Client) doRequestWithRetry(ctx context.Context, method, endpoint string
 
 	var response []byte
 
+	retryDelays, err := c.cfg.GetRetryDelaysAsDuration()
+	if err != nil {
+		return nil, err
+	}
+
 	cfg := retry.RetryConfig{
-		MaxRetries: 3,
-		Delays:     []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
+		MaxRetries: c.cfg.MaxRetries,
+		Delays:     retryDelays,
 		IsRetryableFn: func(err error) bool {
 			return isNetworkError(err)
 		},
 	}
 
-	err := retry.Do(ctx, cfg, func() error {
+	err = retry.Do(ctx, cfg, func() error {
 		resp, err := c.doRequest(method, endpoint, body)
 		if err != nil {
 			return err
@@ -172,7 +185,7 @@ func (c *Client) Get(ctx context.Context, endpoint string) ([]byte, error) {
 	return c.doRequestWithRetry(ctx, http.MethodGet, endpoint, nil)
 }
 
-// isNetworkError проверяет является ли ошибка сетевой
+// isNetworkError проверяет что ошибка сетевая
 func isNetworkError(err error) bool {
 	if err == nil {
 		return false

@@ -129,7 +129,10 @@ func (a *Server) storageInitializer(ctx context.Context) *service.Storage {
 			if err := migrator.Up(); err != nil {
 				a.log.Error("migration failed", zap.Error(err))
 			}
-			storage = dbstorage.NewDBStorage(dbase.Pool, a.log)
+			storage, err = dbstorage.NewDBStorage(dbase.Pool, a.log, a.cfg)
+			if err != nil {
+				a.log.Warn("Failed to connect to DB, falling back to in-memory storage", zap.Error(err))
+			}
 		}
 	} else {
 		a.log.Info("No database DSN provided, using in-memory storage")

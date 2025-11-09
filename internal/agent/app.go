@@ -42,7 +42,7 @@ func (a *App) Initialize(ctx context.Context) error {
 		a.config.ServerAddr,
 		signerService,
 		a.logger,
-		a.config.RateLimit,
+		a.config,
 	)
 
 	providers := []interfaces.MetricsProvider{
