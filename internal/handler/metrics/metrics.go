@@ -84,13 +84,24 @@ func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/json" {
+	contentType := r.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
 		h.logAndWriteError(
 			w,
 			fmt.Errorf("unsupported content type"),
 			http.StatusUnsupportedMediaType,
 			"unsupported content type",
 			zap.String("content_type", r.Header.Get("Content-Type")),
+		)
+		return
+	}
+
+	if r.Body == nil || r.ContentLength == 0 {
+		h.logAndWriteError(
+			w,
+			fmt.Errorf("empty request body"),
+			http.StatusBadRequest,
+			"empty request body",
 		)
 		return
 	}
@@ -110,7 +121,8 @@ func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MetricsHandler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/json" {
+	contentType := r.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
 		h.logAndWriteError(
 			w,
 			fmt.Errorf("unsupported content type"),
@@ -136,7 +148,8 @@ func (h *MetricsHandler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) {
-	if r.Header.Get("Content-Type") != "application/json" {
+	contentType := r.Header.Get("Content-Type")
+	if !strings.Contains(contentType, "application/json") {
 		h.logAndWriteError(
 			w,
 			fmt.Errorf("unsupported content type"),

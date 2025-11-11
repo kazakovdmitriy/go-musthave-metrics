@@ -11,10 +11,12 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/metrics"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/compressor"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/mainpageservice"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/metricsservice"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/signerservice"
 	"go.uber.org/zap"
 )
 
@@ -28,10 +30,15 @@ func SetupHandler(
 	r := chi.NewRouter()
 
 	compressorService := compressor.NewHTTPGzipAdapter()
+	var signerService signer.Signer = nil
+	if cfg.SecretKet != "" {
+		signerService = signerservice.NewSHA256Signer(cfg.SecretKet)
+	}
 
 	setupMiddlewares(
 		r,
 		compressorService,
+		signerService,
 		activeRequests,
 		shutdownChan,
 		log,
@@ -55,6 +62,7 @@ func SetupHandler(
 func setupMiddlewares(
 	r chi.Router,
 	compressorService compressor.Compressor,
+	signerService signer.Signer,
 	activeRequests *sync.WaitGroup,
 	shutdownChan chan struct{},
 	log *zap.Logger,
@@ -63,6 +71,9 @@ func setupMiddlewares(
 	r.Use(middlewares.ResponseLogger(log))
 	r.Use(middlewares.TrackActiveRequests(activeRequests, shutdownChan))
 	r.Use(compressor.Compress(compressorService, log))
+	if signerService != nil {
+		r.Use(signer.HashValidationMiddleware(signerService, log))
+	}
 }
 
 // Ping

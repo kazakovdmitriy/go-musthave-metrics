@@ -41,7 +41,7 @@ func NewDBStorage(db *pgxpool.Pool, log *zap.Logger) *dbstorage {
 	return storage
 }
 
-func (db *dbstorage) UpdateGauge(ctx context.Context, name string, value float64) {
+func (db *dbstorage) UpdateGauge(ctx context.Context, name string, value float64) error {
 	query := `
 		INSERT INTO metrics (id, mtype, value)
 		VALUES ($1, 'gauge', $2)
@@ -61,10 +61,13 @@ func (db *dbstorage) UpdateGauge(ctx context.Context, name string, value float64
 			zap.String("metric name", name),
 			zap.Float64("value", value),
 		)
+		return err
 	}
+
+	return nil
 }
 
-func (db *dbstorage) UpdateCounter(ctx context.Context, name string, value int64) {
+func (db *dbstorage) UpdateCounter(ctx context.Context, name string, value int64) error {
 	query := `
 		INSERT INTO metrics (id, mtype, delta)
 		VALUES ($1, 'counter', $2)
@@ -84,7 +87,11 @@ func (db *dbstorage) UpdateCounter(ctx context.Context, name string, value int64
 			zap.String("metric name", name),
 			zap.Int64("metric value", value),
 		)
+
+		return err
 	}
+
+	return nil
 }
 
 func (db *dbstorage) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {

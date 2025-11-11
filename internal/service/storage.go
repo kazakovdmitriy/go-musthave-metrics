@@ -7,8 +7,8 @@ import (
 )
 
 type Storage interface {
-	UpdateGauge(ctx context.Context, name string, value float64)
-	UpdateCounter(ctx context.Context, name string, value int64)
+	UpdateGauge(ctx context.Context, name string, value float64) error
+	UpdateCounter(ctx context.Context, name string, value int64) error
 	UpdateMetrics(ctx context.Context, metrics []model.Metrics) error
 	GetGauge(ctx context.Context, name string) (float64, bool)
 	GetCounter(ctx context.Context, name string) (int64, bool)

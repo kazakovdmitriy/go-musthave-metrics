@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
 	"go.uber.org/zap"
@@ -21,13 +22,14 @@ type Client struct {
 	baseURL           string
 	httpClient        *http.Client
 	headers           map[string]string
+	signer            signer.Signer
 	UseGzip           bool
 	CompressionLevel  int
 	minSizeToCompress int
 	log               *zap.Logger
 }
 
-func NewClient(baseURL string, log *zap.Logger) *Client {
+func NewClient(baseURL string, signer signer.Signer, log *zap.Logger) *Client {
 	if strings.HasPrefix(baseURL, ":") {
 		baseURL = "localhost" + baseURL
 	}
@@ -41,6 +43,7 @@ func NewClient(baseURL string, log *zap.Logger) *Client {
 			Timeout: time.Second * 20,
 		},
 		headers:           make(map[string]string),
+		signer:            signer,
 		UseGzip:           true,
 		CompressionLevel:  gzip.DefaultCompression,
 		minSizeToCompress: 32,
@@ -74,6 +77,7 @@ func (c *Client) shouldCompressRequest(body []byte) bool {
 func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, error) {
 	var reader io.Reader
 	var bodyData []byte
+	var hashValue string
 
 	if body != nil {
 		jsonData, err := json.Marshal(body)
@@ -81,6 +85,10 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 			return nil, fmt.Errorf("marshaling payload failed: %w", err)
 		}
 		bodyData = jsonData
+
+		if c.signer != nil {
+			hashValue = c.signer.Sign(jsonData)
+		}
 
 		if c.shouldCompressRequest(bodyData) {
 			compressed, err := compressorservice.Compress(bodyData, c.CompressionLevel)
@@ -106,6 +114,10 @@ func (c *Client) doRequest(method, endpoint string, body interface{}) ([]byte, e
 
 	if body != nil && c.shouldCompressRequest(bodyData) {
 		req.Header.Set("Content-Encoding", "gzip")
+	}
+
+	if body != nil && c.signer != nil {
+		req.Header.Set("HashSHA256", hashValue)
 	}
 
 	resp, err := c.httpClient.Do(req)
