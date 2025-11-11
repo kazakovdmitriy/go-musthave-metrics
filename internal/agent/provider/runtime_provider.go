@@ -1,21 +1,31 @@
-package agent
+package provider
 
 import (
 	"context"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"math/rand/v2"
 	"runtime"
 )
 
-func GetMetrics(ctx context.Context) (MemoryMetrics, error) {
+// RuntimeMetricsProvider поставщик метрик runtime
+type RuntimeMetricsProvider struct{}
 
+// NewRuntimeMetricsProvider создает нового поставщика метрик runtime
+func NewRuntimeMetricsProvider() interfaces.MetricsProvider {
+	return &RuntimeMetricsProvider{}
+}
+
+// Collect собирает метрики runtime
+func (p *RuntimeMetricsProvider) Collect(ctx context.Context) (model.MemoryMetrics, error) {
 	select {
 	case <-ctx.Done():
-		return MemoryMetrics{}, ctx.Err()
+		return model.MemoryMetrics{}, ctx.Err()
 	default:
 		var m runtime.MemStats
 		runtime.ReadMemStats(&m)
 
-		return MemoryMetrics{
+		return model.MemoryMetrics{
 			Alloc:         float64(m.Alloc),
 			BuckHashSys:   float64(m.BuckHashSys),
 			Frees:         float64(m.Frees),
@@ -46,5 +56,4 @@ func GetMetrics(ctx context.Context) (MemoryMetrics, error) {
 			RandomValue:   rand.Float64(),
 		}, nil
 	}
-
 }

@@ -5,18 +5,17 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"strings"
-	"time"
-
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
+	"strings"
 )
 
 var _ service.Storage = (*dbstorage)(nil)
@@ -28,17 +27,22 @@ type dbstorage struct {
 	retryCfg retry.RetryConfig
 }
 
-func NewDBStorage(db *pgxpool.Pool, log *zap.Logger) *dbstorage {
+func NewDBStorage(db *pgxpool.Pool, log *zap.Logger, cfg *config.ServerFlags) (*dbstorage, error) {
+	retryDelays, err := cfg.GetRetryDelaysAsDuration()
+	if err != nil {
+		return nil, err
+	}
+
 	storage := &dbstorage{
 		db:  db,
 		log: log,
 		retryCfg: retry.RetryConfig{
-			MaxRetries:    3,
-			Delays:        []time.Duration{1 * time.Second, 3 * time.Second, 5 * time.Second},
+			MaxRetries:    cfg.MaxRetries,
+			Delays:        retryDelays,
 			IsRetryableFn: isConnectionError,
 		},
 	}
-	return storage
+	return storage, nil
 }
 
 func (db *dbstorage) UpdateGauge(ctx context.Context, name string, value float64) error {

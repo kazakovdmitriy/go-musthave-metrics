@@ -2,10 +2,10 @@ package handler
 
 import (
 	"fmt"
+	"github.com/go-chi/chi"
 	"net/http"
 	"sync"
 
-	"github.com/go-chi/chi"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/mainpage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/metrics"
@@ -41,6 +41,7 @@ func SetupHandler(
 		signerService,
 		activeRequests,
 		shutdownChan,
+		cfg.RateLimit,
 		log,
 	)
 
@@ -65,11 +66,13 @@ func setupMiddlewares(
 	signerService signer.Signer,
 	activeRequests *sync.WaitGroup,
 	shutdownChan chan struct{},
+	maxConcurrent int,
 	log *zap.Logger,
 ) {
 	r.Use(middlewares.RequestLogger(log))
 	r.Use(middlewares.ResponseLogger(log))
 	r.Use(middlewares.TrackActiveRequests(activeRequests, shutdownChan))
+	r.Use(middlewares.RateLimiter(maxConcurrent, log))
 	r.Use(compressor.Compress(compressorService, log))
 	if signerService != nil {
 		r.Use(signer.HashValidationMiddleware(signerService, log))
