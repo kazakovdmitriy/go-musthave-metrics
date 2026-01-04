@@ -139,7 +139,7 @@ func (h *MetricsHandler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.UpdateMetrics(r.Context(), data); err != nil {
+	if err := h.service.UpdateMetrics(r.Context(), data, r.RemoteAddr); err != nil {
 		h.logAndWriteError(w, err, http.StatusInternalServerError, "failed to save batch of metrics", zap.Error(err))
 		return
 	}
