@@ -48,7 +48,7 @@ func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metr
 		Timestamp: now,
 		Ts:        now.UnixMilli(),
 		Metrics:   metricsArr,
-		IpAddr:    ipAddr,
+		IPAddr:    ipAddr,
 	}
 
 	go func() {
