@@ -46,7 +46,7 @@ func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metr
 	now := time.Now()
 	event := model.MetricProcessedEvent{
 		Timestamp: now,
-		Ts:        now.UnixMilli(),
+		TS:        now.UnixMilli(),
 		Metrics:   metricsArr,
 		IPAddr:    ipAddr,
 	}
