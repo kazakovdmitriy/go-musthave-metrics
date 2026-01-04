@@ -1,4 +1,3 @@
-// sender/unlimited_sender.go
 package sender
 
 import (
@@ -30,7 +29,6 @@ func (us *unlimitedSender) Send(
 	ctx context.Context,
 	metrics model.MemoryMetrics,
 	deltaCounter int64,
-	logger *zap.Logger,
 ) error {
 	us.wg.Add(1)
 

@@ -5,9 +5,10 @@ import (
 	"compress/gzip"
 	"encoding/json"
 	"fmt"
+	"io"
+
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
 	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
-	"io"
 )
 
 // RequestProcessor обрабатывает запросы (подпись, сжатие)

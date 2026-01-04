@@ -7,18 +7,17 @@ import (
 	"time"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/observers"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 type metricsService struct {
 	storage  service.Storage
-	eventPub observers.EventPublisher
+	eventPub EventPublisher
 }
 
 func NewMetricService(
 	storage service.Storage,
-	eventPub observers.EventPublisher,
+	eventPub EventPublisher,
 ) *metricsService {
 	return &metricsService{
 		storage:  storage,
@@ -41,7 +40,7 @@ func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metr
 
 	var metricsArr []string
 	for _, m := range metrics {
-		metricsArr = append(metricsArr, m.MType)
+		metricsArr = append(metricsArr, m.ID)
 	}
 
 	now := time.Now()
@@ -53,7 +52,7 @@ func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metr
 	}
 
 	go func() {
-		err := s.eventPub.Publish(ctx, event)
+		err := s.eventPub.Publish(event)
 		if err != nil {
 			fmt.Printf("failed to publish metrics: %v\n", err)
 		}

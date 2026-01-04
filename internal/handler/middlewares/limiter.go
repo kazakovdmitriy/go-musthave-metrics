@@ -1,8 +1,9 @@
 package middlewares
 
 import (
-	"go.uber.org/zap"
 	"net/http"
+
+	"go.uber.org/zap"
 )
 
 func RateLimiter(maxConcurrent int, log *zap.Logger) func(next http.Handler) http.Handler {

@@ -4,11 +4,12 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"

@@ -2,12 +2,13 @@ package main
 
 import (
 	"context"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 	"log"
 	"os/signal"
 	"syscall"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 )
 
 func main() {

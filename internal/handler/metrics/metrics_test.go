@@ -9,7 +9,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/go-chi/chi"
+	"github.com/go-chi/chi/v5"
 	"github.com/golang/mock/gomock"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/mocks"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"

@@ -22,7 +22,7 @@ type HTTPObserver struct {
 func NewHTTPObserver(url string, log *zap.Logger) *HTTPObserver {
 	return &HTTPObserver{
 		url: url,
-		client: &http.Client{ // ИНИЦИАЛИЗИРУЕМ КЛИЕНТ
+		client: &http.Client{
 			Timeout: 10 * time.Second,
 			Transport: &http.Transport{
 				MaxIdleConns:        10,

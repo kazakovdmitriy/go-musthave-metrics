@@ -2,9 +2,10 @@ package reporter
 
 import (
 	"context"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
 	"sync"
 	"time"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
 
 	"go.uber.org/zap"
 )
@@ -57,7 +58,7 @@ func (mr *metricsReporter) Start() {
 func (mr *metricsReporter) report() {
 	metrics, count := mr.collector.GetMetrics()
 
-	err := mr.sender.Send(mr.ctx, metrics, int64(count), mr.logger)
+	err := mr.sender.Send(mr.ctx, metrics, int64(count))
 	if err != nil {
 		mr.logger.Error("error sending metrics", zap.Error(err))
 	} else {

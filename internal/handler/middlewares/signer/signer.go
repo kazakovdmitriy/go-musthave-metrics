@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"io"
 	"net/http"
-	"net/http/httptest"
 
 	"go.uber.org/zap"
 )
@@ -61,32 +60,6 @@ func HashValidationMiddleware(signer Signer, log *zap.Logger) func(next http.Han
 			}
 
 			next.ServeHTTP(w, r)
-		})
-	}
-}
-
-func HashResponseMiddleware(signer Signer) func(next http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if signer == nil {
-				next.ServeHTTP(w, r)
-				return
-			}
-
-			rec := httptest.NewRecorder()
-			next.ServeHTTP(rec, r)
-
-			body := rec.Body.Bytes()
-			hash := signer.Sign(body)
-
-			for k, vs := range rec.Header() {
-				for _, v := range vs {
-					w.Header().Add(k, v)
-				}
-			}
-			w.Header().Set("HashSHA256", hash)
-			w.WriteHeader(rec.Code)
-			w.Write(body)
 		})
 	}
 }

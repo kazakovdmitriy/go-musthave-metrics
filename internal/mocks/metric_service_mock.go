@@ -94,15 +94,15 @@ func (mr *MockMetricsServiceMockRecorder) UpdateGauge(ctx, name, value interface
 }
 
 // UpdateMetrics mocks base method.
-func (m *MockMetricsService) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {
+func (m *MockMetricsService) UpdateMetrics(ctx context.Context, metrics []model.Metrics, ipAddr string) error {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "UpdateMetrics", ctx, metrics)
+	ret := m.ctrl.Call(m, "UpdateMetrics", ctx, metrics, ipAddr)
 	ret0, _ := ret[0].(error)
 	return ret0
 }
 
 // UpdateMetrics indicates an expected call of UpdateMetrics.
-func (mr *MockMetricsServiceMockRecorder) UpdateMetrics(ctx, metrics interface{}) *gomock.Call {
+func (mr *MockMetricsServiceMockRecorder) UpdateMetrics(ctx, metrics, ipAddr interface{}) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetrics", reflect.TypeOf((*MockMetricsService)(nil).UpdateMetrics), ctx, metrics)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateMetrics", reflect.TypeOf((*MockMetricsService)(nil).UpdateMetrics), ctx, metrics, ipAddr)
 }
