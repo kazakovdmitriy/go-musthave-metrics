@@ -7,6 +7,7 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/observers"
 
 	"net/http"
+	"net/http/pprof"
 	"sync"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
@@ -59,6 +60,8 @@ func SetupHandler(
 
 	metricsHandler := newMetricsHandler(*storage, log, &cfg)
 	setupMetricsRoutes(r, metricsHandler)
+
+	r.Mount("/debug/pprof", pprofRoutes())
 
 	return r, nil
 }
@@ -147,4 +150,25 @@ func setupMetricsRoutes(r chi.Router, metricsHandler *metrics.MetricsHandler) {
 
 		r.Post("/", metricsHandler.SentMetricPost)
 	})
+}
+
+func pprofRoutes() chi.Router {
+	r := chi.NewRouter()
+
+	// Используем Handle вместо Get для обработчиков, которые возвращают http.Handler
+	r.HandleFunc("/", pprof.Index)
+	r.HandleFunc("/cmdline", pprof.Cmdline)
+	r.HandleFunc("/profile", pprof.Profile)
+	r.HandleFunc("/symbol", pprof.Symbol)
+	r.HandleFunc("/trace", pprof.Trace)
+
+	// Для остальных используем Handle с pprof.Handler
+	r.Handle("/heap", pprof.Handler("heap"))
+	r.Handle("/goroutine", pprof.Handler("goroutine"))
+	r.Handle("/allocs", pprof.Handler("allocs"))
+	r.Handle("/block", pprof.Handler("block"))
+	r.Handle("/mutex", pprof.Handler("mutex"))
+	r.Handle("/threadcreate", pprof.Handler("threadcreate"))
+
+	return r
 }

@@ -2,8 +2,10 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"sync"
@@ -61,7 +63,7 @@ func (a *Server) Run() error {
 
 	go func() {
 		a.log.Info("server starting", zap.String("addr", a.cfg.ServerAddr))
-		if err := a.server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			a.log.Error("server failed to start", zap.Error(err))
 		}
 	}()
