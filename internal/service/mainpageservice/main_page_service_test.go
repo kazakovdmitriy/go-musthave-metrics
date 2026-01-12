@@ -27,6 +27,7 @@ func TestMainPageService_GetMainPage_WithGomock(t *testing.T) {
 			Times(1)
 
 		service, err := NewMainPageService(mockStorage)
+		require.NoError(t, err)
 
 		// Act
 		result, err := service.GetMainPage(ctx)
@@ -53,6 +54,7 @@ func TestMainPageService_GetMainPage_WithGomock(t *testing.T) {
 			Times(1)
 
 		service, err := NewMainPageService(mockStorage)
+		require.NoError(t, err)
 
 		// Act
 		result, err := service.GetMainPage(ctx)
@@ -77,6 +79,7 @@ func TestMainPageService_GetMainPage_WithGomock(t *testing.T) {
 			Times(1)
 
 		service, err := NewMainPageService(mockStorage)
+		require.NoError(t, err)
 
 		// Act
 		result, err := service.GetMainPage(ctx)
