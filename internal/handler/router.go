@@ -64,8 +64,6 @@ func SetupHandler(
 	metricsHandler := newMetricsHandler(*storage, log, &cfg)
 	setupMetricsRoutes(r, metricsHandler)
 
-	//r.Mount("/debug/pprof", pprofRoutes())
-
 	return r, nil
 }
 

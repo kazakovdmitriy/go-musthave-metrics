@@ -13,5 +13,6 @@ type Storage interface {
 	GetGauge(ctx context.Context, name string) (float64, bool)
 	GetCounter(ctx context.Context, name string) (int64, bool)
 	GetAllMetrics(ctx context.Context) (string, error)
+	Ping(ctx context.Context) error
 	Close() error
 }
