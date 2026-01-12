@@ -55,13 +55,16 @@ func SetupHandler(
 	}
 	setupPingRoutes(r, pingHandler)
 
-	mainPageHandler := newMainPageService(*storage)
+	mainPageHandler, err := newMainPageService(*storage)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
 	setupMainRoutes(r, mainPageHandler)
 
 	metricsHandler := newMetricsHandler(*storage, log, &cfg)
 	setupMetricsRoutes(r, metricsHandler)
 
-	r.Mount("/debug/pprof", pprofRoutes())
+	//r.Mount("/debug/pprof", pprofRoutes())
 
 	return r, nil
 }
@@ -97,9 +100,12 @@ func setupPingRoutes(r chi.Router, pingHandler *ping.PingHandler) {
 }
 
 // MainPage
-func newMainPageService(memStorage service.Storage) *mainpage.MainPageHandler {
-	mainPageService := mainpageservice.NewMainPageService(memStorage)
-	return mainpage.NewMainPageHandler(mainPageService)
+func newMainPageService(memStorage service.Storage) (*mainpage.MainPageHandler, error) {
+	mainPageService, err := mainpageservice.NewMainPageService(memStorage)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+	return mainpage.NewMainPageHandler(mainPageService), nil
 }
 
 func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {

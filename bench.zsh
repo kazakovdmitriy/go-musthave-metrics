@@ -1,14 +1,22 @@
 #!/bin/zsh
 
+# Проверяем, передан ли аргумент
+if [[ $# -ne 1 ]] || [[ "$1" != "base" && "$1" != "result" ]]; then
+  echo "Использование: $0 {base|result}"
+  exit 1
+fi
+
+PROFILE_NAME="$1"
+
 # Эндпоинты с указанием метода: GET или POST
 # Формат: "METHOD|URL"
 ENDPOINTS=(
   "GET|http://localhost:8080/"
+  "POST|http://localhost:8080/update/gauge/test/123"
   "GET|http://localhost:8080/value/gauge/test"
-  "POST|http://localhost:8080/update/gauge/test"
 )
 
-SHARMANKA_TIME="50s"
+SHARMANKA_TIME="30s"
 
 # Убедимся, что папка для профилей существует
 mkdir -p profiles
@@ -24,11 +32,8 @@ for entry in "${ENDPOINTS[@]}"; do
   IFS='|' read -r method url <<< "$entry"
 
   if [[ "$method" == "POST" ]]; then
-    # Пример тела запроса — можно изменить под твои нужды
-    # Например, передаём JSON или plain text
-    hey -z "${SHARMANKA_TIME}" -c 20 -m POST -d "1" -T "text/plain" "$url" &
+    hey -z "${SHARMANKA_TIME}" -c 20 -m POST "$url" &
   else
-    # По умолчанию — GET
     hey -z "${SHARMANKA_TIME}" -c 20 "$url" &
   fi
 
@@ -38,12 +43,12 @@ done
 # Ждём 15 секунд
 sleep 15
 
-# Сохраняем heap-профиль
-curl -s http://localhost:8080/debug/pprof/heap > profiles/base.pprof
+# Сохраняем heap-профиль с нужным именем
+curl -s "http://localhost:6060/debug/pprof/heap?seconds=1" > "profiles/${PROFILE_NAME}.pprof"
 
 # Ждём завершения всех процессов hey
 for pid in "${pids[@]}"; do
   wait "$pid"
 done
 
-echo "Все нагрузочные тесты завершены."
+echo "Все нагрузочные тесты завершены. Профиль сохранён как profiles/${PROFILE_NAME}.pprof"
