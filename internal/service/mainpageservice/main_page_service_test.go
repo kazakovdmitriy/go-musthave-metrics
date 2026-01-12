@@ -26,7 +26,7 @@ func TestMainPageService_GetMainPage_WithGomock(t *testing.T) {
 			Return(expectedMetrics, nil).
 			Times(1)
 
-		service := NewMainPageService(mockStorage)
+		service, err := NewMainPageService(mockStorage)
 
 		// Act
 		result, err := service.GetMainPage(ctx)
@@ -52,7 +52,7 @@ func TestMainPageService_GetMainPage_WithGomock(t *testing.T) {
 			Return("", expectedErr).
 			Times(1)
 
-		service := NewMainPageService(mockStorage)
+		service, err := NewMainPageService(mockStorage)
 
 		// Act
 		result, err := service.GetMainPage(ctx)
@@ -76,7 +76,7 @@ func TestMainPageService_GetMainPage_WithGomock(t *testing.T) {
 			Return("test", nil).
 			Times(1)
 
-		service := NewMainPageService(mockStorage)
+		service, err := NewMainPageService(mockStorage)
 
 		// Act
 		result, err := service.GetMainPage(ctx)
