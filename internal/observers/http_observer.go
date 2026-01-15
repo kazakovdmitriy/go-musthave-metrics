@@ -28,7 +28,7 @@ type HTTPObserver struct {
 func NewHTTPObserver(url string, log *zap.Logger, cfg *config.ServerFlags) (*HTTPObserver, error) {
 	retryDelays, err := cfg.GetRetryDelaysAsDuration()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("could not parse retry delays: %w", err)
 	}
 
 	return &HTTPObserver{
@@ -71,7 +71,7 @@ func (h *HTTPObserver) sendEventAsync(event model.MetricProcessedEvent) {
 
 		req, err := http.NewRequest(http.MethodPost, h.url, bytes.NewBuffer(jsonData))
 		if err != nil {
-			return err
+			return fmt.Errorf("failed to create request: %w", err)
 		}
 		req.Header.Set("Content-Type", "application/json")
 

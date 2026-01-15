@@ -64,9 +64,6 @@ func (f *FileObserver) OnMetricProcessed(event model.MetricProcessedEvent) {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	f.mu.Lock()
-	defer f.mu.Unlock()
-
 	if _, err := f.file.Write(jsonEvent); err != nil {
 		f.log.Error("Error writing to file", zap.Error(err))
 		return
