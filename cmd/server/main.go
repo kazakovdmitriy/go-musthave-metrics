@@ -2,7 +2,9 @@ package main
 
 import (
 	"fmt"
+	"net/http"
 	"os"
+	"sync"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
@@ -20,6 +22,18 @@ func main() {
 	}
 	defer log.Sync()
 
+	// === ЗАПУСК PPROF НА ОТДЕЛЬНОМ ПОРТУ ===
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		log.Info("pprof server starting on :6060")
+		if err := http.ListenAndServe("localhost:6060", nil); err != nil {
+			log.Error("pprof server failed", zap.Error(err))
+		}
+	}()
+	// ======================================
+
 	server, err := server.NewApp(cfg, log)
 	if err != nil {
 		log.Fatal("failed to create application", zap.Error(err))
@@ -30,4 +44,6 @@ func main() {
 		log.Error("application failed", zap.Error(err))
 		os.Exit(1)
 	}
+
+	wg.Wait()
 }

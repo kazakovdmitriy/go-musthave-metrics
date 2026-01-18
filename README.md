@@ -2,6 +2,30 @@
 
 Шаблон репозитория для трека «Сервер сбора метрик и алертинга».
 
+## Оптимизация памяти
+Оптимизировал мидлварь и сервис gzip и mainpageservice получились следующие результаты
+
+| flat      | flat%   | sum%   | cum       | cum%   | function                                                              |
+|-----------|---------|--------|-----------|--------|-----------------------------------------------------------------------|
+| -3610.34kB| 35.52%  | 35.52% | -3615.04kB| 35.57% | `compress/flate.NewWriter` (inline)                                   |
+| 2064.04kB | 20.31%  | 15.21% | 2064.04kB | 20.31% | `github.com/jackc/chunkreader/v2.(*ChunkReader).newBuf` (inline)      |
+| -1026.25kB| 10.10%  | 25.31% | -1026.25kB| 10.10% | `compress/flate.(*huffmanEncoder).generate`                           |
+| 1026kB    | 10.09%  | 15.22% | 1026kB    | 10.09% | `bufio.NewWriterSize` (inline)                                        |
+| -514.63kB | 5.06%   | 20.28% | -514.63kB | 5.06%  | `github.com/jackc/pgx/v4/pgxpool.(*connResource).getPoolRow` (inline) |
+| 514.63kB  | 5.06%   | 15.22% | 514.63kB  | 5.06%  | `github.com/jackc/pgx/v4/pgxpool.(*connResource).getPoolRows` (inline)|
+| 512.75kB  | 5.04%   | 10.17% | 3603.47kB | 35.45% | `github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/dbstorage.(*dbstorage).GetAllMetrics.func1` |
+| 512.69kB  | 5.04%   | 5.13%  | 512.69kB  | 5.04%  | `strings.(*Builder).grow`                                             |
+| -512.12kB | 5.04%   | 10.17% | -590.76kB | 5.81%  | `github.com/kazakovdmitriy/go-musthave-metrics/internal/handler.setupMiddlewares.HashValidationMiddleware.func6.1` |
+| 512.12kB  | 5.04%   | 5.13%  | 512.12kB  | 5.04%  | `strings.(*Builder).Write`                                            |
+| 512.12kB  | 5.04%   | 0.089% | 512.12kB  | 5.04%  | `github.com/jackc/pgx/v4.(*Conn).getRows`                             |
+| -512.12kB | 5.04%   | 5.13%  | 513.88kB  | 5.06%  | `net/http.(*conn).readRequest`                                        |
+| -512.09kB | 5.04%   | 10.17% | -527.74kB | 5.19%  | `github.com/kazakovdmitriy/go-musthave-metrics/internal/handler.setupMiddlewares.RequestLogger.func1.1` |
+| 512.05kB  | 5.04%   | 5.13%  | 512.05kB  | 5.04%  | `github.com/jackc/puddle.(*Pool).Acquire`                             |
+| 512.04kB  | 5.04%   | 0.09%  | 512.04kB  | 5.04%  | `compress/flate.newHuffmanEncoder` (inline)                           |
+| -512.03kB | 5.04%   | 5.13%  | -512.03kB | 5.04%  | `internal/profile.init.func4`                                         |
+| 512.01kB  | 5.04%   | 0.09%  | 509.50kB  | 5.01%  | `github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/dbstorage.(*dbstorage).GetGauge.func1` |
+| -4.18kB   | 0.041%  | 0.13%  | -4.18kB   | 0.041% | `compress/flate.(*compressor).initDeflate` (inline)                   |
+
 ## Начало работы
 
 1. Склонируйте репозиторий в любую подходящую директорию на вашем компьютере.

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/jackc/pgconn"
@@ -221,7 +222,8 @@ func (db *dbstorage) GetCounter(ctx context.Context, name string) (int64, bool) 
 }
 
 func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
-	var result string
+	// Без предварительного выделения - пусть Builder сам управляет
+	var builder strings.Builder
 
 	err := retry.Do(ctx, db.retryCfg, func() error {
 		rows, err := db.db.Query(ctx, `SELECT id, mtype, delta, value FROM metrics;`)
@@ -231,7 +233,7 @@ func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
 		defer rows.Close()
 
 		found := false
-		result = "<ul>\n"
+		builder.WriteString("<ul>\n")
 
 		for rows.Next() {
 			found = true
@@ -243,16 +245,21 @@ func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
 				return fmt.Errorf("failed to scan metric row: %w", err)
 			}
 
-			switch mtype {
-			case "counter":
-				if delta.Valid {
-					result += fmt.Sprintf("<li>%s = %d</li>\n", id, delta.Int64)
-				}
-			case "gauge":
-				if value.Valid {
-					result += fmt.Sprintf("<li>%s = %f</li>\n", id, value.Float64)
-				}
+			// Минимизируем WriteString вызовы
+			builder.WriteString("<li>")
+			builder.WriteString(id)
+			builder.WriteString(" = ")
+
+			if mtype == "counter" && delta.Valid {
+				// Используем AppendInt для минимальной аллокации
+				buf := strconv.AppendInt(make([]byte, 0, 20), delta.Int64, 10)
+				builder.Write(buf)
+			} else if mtype == "gauge" && value.Valid {
+				// Форматируем с фиксированной точностью
+				buf := strconv.AppendFloat(make([]byte, 0, 32), value.Float64, 'f', 2, 64)
+				builder.Write(buf)
 			}
+			builder.WriteString("</li>\n")
 		}
 
 		if err = rows.Err(); err != nil {
@@ -263,7 +270,7 @@ func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
 			return fmt.Errorf("no metrics found")
 		}
 
-		result += "</ul>\n"
+		builder.WriteString("</ul>\n")
 		return nil
 	})
 
@@ -272,7 +279,7 @@ func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
 		return "", err
 	}
 
-	return result, nil
+	return builder.String(), nil
 }
 
 func (db *dbstorage) Ping(ctx context.Context) error {

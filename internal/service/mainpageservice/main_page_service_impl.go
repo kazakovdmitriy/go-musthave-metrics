@@ -2,28 +2,19 @@ package mainpageservice
 
 import (
 	"context"
-	"fmt"
+	"html/template"
+	"strings"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 type mainPageService struct {
-	storage service.Storage
+	storage  service.Storage
+	template *template.Template
 }
 
-func NewMainPageService(storage service.Storage) *mainPageService {
-	return &mainPageService{
-		storage: storage,
-	}
-}
-
-func (s *mainPageService) GetMainPage(ctx context.Context) (string, error) {
-	metricsResult, err := s.storage.GetAllMetrics(ctx)
-	if err != nil {
-		return "", err
-	}
-
-	return fmt.Sprintf(`<!DOCTYPE html>
+func NewMainPageService(storage service.Storage) (*mainPageService, error) {
+	tmpl, err := template.New("mainpage").Parse(`<!DOCTYPE html>
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
@@ -32,8 +23,30 @@ func (s *mainPageService) GetMainPage(ctx context.Context) (string, error) {
 </head>
 <body>
     <h1>Список метрик</h1>
-    <p>%s</p>
+    <p>{{.}}</p>
 </body>
-</html>
-`, metricsResult), nil
+</html>`)
+
+	if err != nil {
+		return nil, err
+	}
+
+	return &mainPageService{
+		storage:  storage,
+		template: tmpl,
+	}, nil
+}
+
+func (s *mainPageService) GetMainPage(ctx context.Context) (string, error) {
+	metricsResult, err := s.storage.GetAllMetrics(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	var builder strings.Builder
+	if err := s.template.Execute(&builder, metricsResult); err != nil {
+		return "", err
+	}
+
+	return builder.String(), nil
 }

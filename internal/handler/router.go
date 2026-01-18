@@ -7,6 +7,7 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/observers"
 
 	"net/http"
+	"net/http/pprof"
 	"sync"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
@@ -54,11 +55,16 @@ func SetupHandler(
 	}
 	setupPingRoutes(r, pingHandler)
 
-	mainPageHandler := newMainPageService(*storage)
+	mainPageHandler, err := newMainPageService(*storage)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
 	setupMainRoutes(r, mainPageHandler)
 
 	metricsHandler := newMetricsHandler(*storage, log, &cfg)
 	setupMetricsRoutes(r, metricsHandler)
+
+	//r.Mount("/debug/pprof", pprofRoutes())
 
 	return r, nil
 }
@@ -94,9 +100,12 @@ func setupPingRoutes(r chi.Router, pingHandler *ping.PingHandler) {
 }
 
 // MainPage
-func newMainPageService(memStorage service.Storage) *mainpage.MainPageHandler {
-	mainPageService := mainpageservice.NewMainPageService(memStorage)
-	return mainpage.NewMainPageHandler(mainPageService)
+func newMainPageService(memStorage service.Storage) (*mainpage.MainPageHandler, error) {
+	mainPageService, err := mainpageservice.NewMainPageService(memStorage)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
+	return mainpage.NewMainPageHandler(mainPageService), nil
 }
 
 func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {
@@ -147,4 +156,25 @@ func setupMetricsRoutes(r chi.Router, metricsHandler *metrics.MetricsHandler) {
 
 		r.Post("/", metricsHandler.SentMetricPost)
 	})
+}
+
+func pprofRoutes() chi.Router {
+	r := chi.NewRouter()
+
+	// Используем Handle вместо Get для обработчиков, которые возвращают http.Handler
+	r.HandleFunc("/", pprof.Index)
+	r.HandleFunc("/cmdline", pprof.Cmdline)
+	r.HandleFunc("/profile", pprof.Profile)
+	r.HandleFunc("/symbol", pprof.Symbol)
+	r.HandleFunc("/trace", pprof.Trace)
+
+	// Для остальных используем Handle с pprof.Handler
+	r.Handle("/heap", pprof.Handler("heap"))
+	r.Handle("/goroutine", pprof.Handler("goroutine"))
+	r.Handle("/allocs", pprof.Handler("allocs"))
+	r.Handle("/block", pprof.Handler("block"))
+	r.Handle("/mutex", pprof.Handler("mutex"))
+	r.Handle("/threadcreate", pprof.Handler("threadcreate"))
+
+	return r
 }
