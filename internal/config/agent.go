@@ -20,19 +20,22 @@ type AgentFlags struct {
 	RetryDelays     []string `env:"RETRY_DELAYS"`
 }
 
-func ParseAgentConfig() *AgentFlags {
+func ParseAgentConfig() (*AgentFlags, error) {
 	var cfg AgentFlags
 
 	// Устанавливаем значения по умолчанию
 	setDefaultAgentFlag(&cfg)
 
 	// Перезаписываем флагами
-	parseFlagsAgent(&cfg)
+	err := parseFlagsAgent(&cfg)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse flags: %w", err)
+	}
 
 	// Устанавливаем переменные окружения
 	parseEnvAgent(&cfg)
 
-	return &cfg
+	return &cfg, nil
 }
 
 func setDefaultAgentFlag(cfg *AgentFlags) {
@@ -50,7 +53,7 @@ func parseEnvAgent(cfg *AgentFlags) {
 	}
 }
 
-func parseFlagsAgent(cfg *AgentFlags) {
+func parseFlagsAgent(cfg *AgentFlags) error {
 	flags := pflag.NewFlagSet("agent", pflag.ExitOnError)
 
 	flags.StringVarP(&cfg.ServerAddr, "address", "a", "http://localhost:8080", "HTTP server port")
@@ -64,9 +67,9 @@ func parseFlagsAgent(cfg *AgentFlags) {
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		_, err := fmt.Fprintf(os.Stderr, "Error: %v\n", err)
 		if err != nil {
-			return
+			return fmt.Errorf("failed to parse flags: %w", err)
 		}
-		os.Exit(1)
+		return fmt.Errorf("failed to parse flags: %w", err)
 	}
 
 	// Проверяем наличие неизвестных флагов
@@ -76,12 +79,14 @@ func parseFlagsAgent(cfg *AgentFlags) {
 			if len(arg) > 0 && arg[0] == '-' {
 				_, err := fmt.Fprintf(os.Stderr, "Error: unknown flag: %s\n", arg)
 				if err != nil {
-					return
+					return fmt.Errorf("failed to parse flags: %w", err)
 				}
-				os.Exit(1)
+				return fmt.Errorf("failed to parse flags: %w", err)
 			}
 		}
 	}
+
+	return nil
 }
 
 func (a *AgentFlags) GetRetryDelaysAsDuration() ([]time.Duration, error) {
