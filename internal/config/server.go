@@ -66,7 +66,7 @@ func parseServerFlag(cfg *ServerFlags) {
 	flags.IntVarP(&cfg.RateLimit, "ratelimit", "l", 0, "Rate limit")
 	flags.IntVarP(&cfg.MaxRetries, "max-retries", "m", 3, "Maximum number of retry attempts")
 	flags.StringArrayVarP(&cfg.RetryDelays, "retry-delays", "s", []string{"1s", "3s", "5s"}, "Retry delays between attempts")
-	flags.StringVarP(&cfg.AuditFile, "audit-file", "z", "audit.log", "Path to audit log file")
+	flags.StringVarP(&cfg.AuditFile, "audit-file", "z", "", "Path to audit log file")
 	flags.StringVarP(&cfg.AuditURL, "audit-url", "u", "", "URL to audit log file")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {

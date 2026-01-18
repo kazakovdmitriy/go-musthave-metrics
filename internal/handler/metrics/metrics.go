@@ -1,3 +1,5 @@
+// Package metrics предоставляет HTTP-хендлеры для работы с метриками приложения:
+// получение, обновление и пакетное сохранение значений типа gauge и counter.
 package metrics
 
 import (
@@ -14,11 +16,16 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 )
 
+// MetricsHandler обрабатывает HTTP-запросы, связанные с получением и обновлением метрик.
+// Поддерживает как URL-параметры, так и JSON-тело запроса.
 type MetricsHandler struct {
 	service MetricsService
 	log     *zap.Logger
 }
 
+// NewMetricsHandler создаёт новый экземпляр MetricsHandler.
+// Принимает реализацию MetricsService и логгер zap.Logger.
+// Не проверяет service на nil — ожидается, что он всегда передаётся корректно.
 func NewMetricsHandler(service MetricsService, log *zap.Logger) *MetricsHandler {
 	return &MetricsHandler{
 		service: service,
@@ -26,6 +33,10 @@ func NewMetricsHandler(service MetricsService, log *zap.Logger) *MetricsHandler 
 	}
 }
 
+// GetMetric обрабатывает GET-запрос вида /value/{metricType}/{metricName}.
+// Возвращает текстовое представление значения метрики (gauge или counter).
+// Устанавливает Content-Type: text/plain.
+// В случае ошибки (неверный тип метрики, метрика не найдена) логирует событие и возвращает соответствующий HTTP-статус.
 func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "metricType")
 	metricName := chi.URLParam(r, "metricName")
@@ -69,6 +80,10 @@ func (h *MetricsHandler) GetMetric(w http.ResponseWriter, r *http.Request) {
 	w.Write([]byte(valueStr))
 }
 
+// UpdateMetric обрабатывает PUT-запрос вида /update/{metricType}/{metricName}/{value}.
+// Обновляет значение метрики на основе переданного строкового значения.
+// Поддерживает только gauge (float64) и counter (int64).
+// При ошибке парсинга или сохранения логирует событие и возвращает соответствующий HTTP-статус.
 func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	metricType := chi.URLParam(r, "metricType")
 	metricName := chi.URLParam(r, "metricName")
@@ -83,6 +98,11 @@ func (h *MetricsHandler) UpdateMetric(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// UpdatePost обрабатывает POST-запрос к эндпоинту /update.
+// Ожидает тело запроса в формате JSON, соответствующее структуре model.Metrics.
+// Обновляет одну метрику (gauge или counter) в зависимости от переданного MType.
+// Требует Content-Type: application/json.
+// В случае ошибки декодирования JSON, отсутствия значения или ошибки сохранения — логирует и возвращает ошибку.
 func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "application/json") {
@@ -120,6 +140,10 @@ func (h *MetricsHandler) UpdatePost(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// UpdateMetrics обрабатывает POST-запрос к эндпоинту /updates.
+// Принимает массив метрик в формате JSON и выполняет их пакетное обновление через сервис.
+// Требует Content-Type: application/json.
+// В случае ошибки декодирования или сохранения — логирует и возвращает ошибку.
 func (h *MetricsHandler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "application/json") {
@@ -147,6 +171,12 @@ func (h *MetricsHandler) UpdateMetrics(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+// SentMetricPost обрабатывает POST-запрос к эндпоинту /value.
+// Принимает описание метрики в формате JSON и возвращает её текущее значение в том же формате.
+// Используется для получения актуального состояния метрики после её возможного обновления.
+// Требует Content-Type: application/json.
+// В случае ошибки — логирует и возвращает соответствующий HTTP-статус.
+// Ответ сериализуется в JSON с Content-Type: application/json.
 func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) {
 	contentType := r.Header.Get("Content-Type")
 	if !strings.Contains(contentType, "application/json") {
@@ -182,10 +212,15 @@ func (h *MetricsHandler) SentMetricPost(w http.ResponseWriter, r *http.Request) 
 
 // --- Helper functions ---
 
+// isValidMetricType проверяет, является ли переданная строка допустимым типом метрики.
+// Допустимые значения: model.Gauge ("gauge") и model.Counter ("counter").
 func isValidMetricType(metricType string) bool {
 	return metricType == model.Gauge || metricType == model.Counter
 }
 
+// updateMetricByType обновляет метрику по типу, имени и строковому значению.
+// Выполняет парсинг значения и вызывает соответствующий метод сервиса.
+// При ошибках логирует и отправляет HTTP-ответ клиенту.
 func (h *MetricsHandler) updateMetricByType(
 	w http.ResponseWriter,
 	ctx context.Context,
@@ -248,6 +283,9 @@ func (h *MetricsHandler) updateMetricByType(
 	return nil
 }
 
+// updateMetricFromJSON обновляет одну метрику на основе структуры model.Metrics.
+// Проверяет наличие обязательных полей (Value для gauge, Delta для counter).
+// При ошибках логирует и отправляет HTTP-ответ клиенту.
 func (h *MetricsHandler) updateMetricFromJSON(
 	w http.ResponseWriter,
 	ctx context.Context,
@@ -305,6 +343,9 @@ func (h *MetricsHandler) updateMetricFromJSON(
 	return nil
 }
 
+// getMetricForJSONResponse извлекает текущее значение метрики по данным из запроса
+// и формирует ответ в виде model.Metrics для последующей сериализации в JSON.
+// При ошибках логирует и отправляет HTTP-ответ клиенту.
 func (h *MetricsHandler) getMetricForJSONResponse(
 	w http.ResponseWriter,
 	ctx context.Context,
@@ -359,6 +400,7 @@ func (h *MetricsHandler) getMetricForJSONResponse(
 	return resp, nil
 }
 
+// logAndWriteError логирует ошибку с дополнительными полями и отправляет HTTP-ошибку клиенту.
 func (h *MetricsHandler) logAndWriteError(
 	w http.ResponseWriter,
 	err error,

@@ -2,6 +2,7 @@ package observers
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
 	"sync"
 
@@ -10,44 +11,62 @@ import (
 )
 
 type FileObserver struct {
-	filePath string
-	log      *zap.Logger
-	mu       sync.Mutex
+	file        *os.File
+	filePath    string
+	log         *zap.Logger
+	syncCounter int
+	mu          sync.Mutex
 }
 
-func NewFileObserver(filePath string, log *zap.Logger) *FileObserver {
+func NewFileObserver(filePath string, log *zap.Logger) (*FileObserver, error) {
+	file, err := os.OpenFile(filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if err != nil {
+		return nil, fmt.Errorf("failed to open file: %w", err)
+	}
+
 	return &FileObserver{
+		file:     file,
 		filePath: filePath,
 		log:      log,
-	}
+	}, nil
 }
 
-func (f *FileObserver) OnMetricProcessed(event model.MetricProcessedEvent) {
+// Close закрывает файл при завершении работы
+func (f *FileObserver) Close() error {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 
-	file, err := os.OpenFile(f.filePath, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		f.log.Error("Error opening file", zap.Error(err), zap.String("file", f.filePath))
-		return
+	if f.file == nil {
+		return nil
 	}
-	defer file.Close()
 
+	if err := f.file.Sync(); err != nil {
+		f.log.Warn("Sync failed on close", zap.Error(err))
+	}
+
+	if err := f.file.Close(); err != nil {
+		return fmt.Errorf("close file: %w", err)
+	}
+
+	f.file = nil
+	f.log.Info("File observer closed", zap.String("path", f.filePath))
+	return nil
+}
+
+func (f *FileObserver) OnMetricProcessed(event model.MetricProcessedEvent) {
 	jsonEvent, err := json.Marshal(event)
 	if err != nil {
-		f.log.Error("Error marshaling event", zap.Error(err), zap.String("file", f.filePath))
+		f.log.Error("Error marshaling event", zap.Error(err))
 		return
 	}
-
 	jsonEvent = append(jsonEvent, '\n')
 
-	if _, err := file.Write(jsonEvent); err != nil {
-		f.log.Error("Error writing to file", zap.Error(err), zap.String("file", f.filePath))
-		return
-	}
+	f.mu.Lock()
+	defer f.mu.Unlock()
 
-	if err := file.Sync(); err != nil {
-		f.log.Warn("Error syncing file", zap.Error(err), zap.String("file", f.filePath))
+	if _, err := f.file.Write(jsonEvent); err != nil {
+		f.log.Error("Error writing to file", zap.Error(err))
+		return
 	}
 
 	f.log.Debug("Metric processed", zap.Any("event", event))

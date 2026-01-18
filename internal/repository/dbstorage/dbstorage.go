@@ -222,7 +222,6 @@ func (db *dbstorage) GetCounter(ctx context.Context, name string) (int64, bool) 
 }
 
 func (db *dbstorage) GetAllMetrics(ctx context.Context) (string, error) {
-	// Без предварительного выделения - пусть Builder сам управляет
 	var builder strings.Builder
 
 	err := retry.Do(ctx, db.retryCfg, func() error {

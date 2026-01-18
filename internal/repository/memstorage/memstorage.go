@@ -240,6 +240,10 @@ func (m *memStorage) StartPeriodicSave(interval time.Duration, filename string) 
 	}()
 }
 
+func (m *memStorage) Ping(ctx context.Context) error {
+	return nil
+}
+
 func (m *memStorage) Close() error {
 	m.tickerMu.Lock()
 	defer m.tickerMu.Unlock()

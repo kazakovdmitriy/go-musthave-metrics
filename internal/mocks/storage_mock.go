@@ -94,6 +94,20 @@ func (mr *MockStorageMockRecorder) GetGauge(ctx, name interface{}) *gomock.Call 
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetGauge", reflect.TypeOf((*MockStorage)(nil).GetGauge), ctx, name)
 }
 
+// Ping mocks base method.
+func (m *MockStorage) Ping(ctx context.Context) error {
+	m.ctrl.T.Helper()
+	ret := m.ctrl.Call(m, "Ping", ctx)
+	ret0, _ := ret[0].(error)
+	return ret0
+}
+
+// Ping indicates an expected call of Ping.
+func (mr *MockStorageMockRecorder) Ping(ctx interface{}) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Ping", reflect.TypeOf((*MockStorage)(nil).Ping), ctx)
+}
+
 // UpdateCounter mocks base method.
 func (m *MockStorage) UpdateCounter(ctx context.Context, name string, value int64) error {
 	m.ctrl.T.Helper()

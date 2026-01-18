@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/observers"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -37,16 +38,42 @@ func NewApp(cfg *config.ServerFlags, log *zap.Logger) (*Server, error) {
 }
 
 func (a *Server) Run() error {
-
 	ctx := context.Background()
+
+	resourceGroup := NewResourceGroup(a.log)
 
 	var activeRequests sync.WaitGroup
 	shutdownCh := make(chan struct{})
 
 	storage := a.storageInitializer(ctx)
+	resourceGroup.Register(storage)
+
+	metricsSubject := observers.NewEventPublisher()
+
+	loggerObserver := observers.NewMetricLogger(a.log)
+	metricsSubject.Register(loggerObserver)
+
+	if a.cfg.AuditFile != "" {
+		fileObserver, err := observers.NewFileObserver(a.cfg.AuditFile, a.log)
+		resourceGroup.Register(fileObserver)
+		if err != nil {
+			return fmt.Errorf("%w", err)
+		}
+		metricsSubject.Register(fileObserver)
+	}
+
+	if a.cfg.AuditURL != "" {
+		httpObserver, err := observers.NewHTTPObserver(a.cfg.AuditURL, a.log, a.cfg)
+		if err != nil {
+			return fmt.Errorf("%w", err)
+		}
+		metricsSubject.Register(httpObserver)
+		resourceGroup.Register(httpObserver)
+	}
 
 	router, err := handler.SetupHandler(
 		storage,
+		metricsSubject,
 		&activeRequests,
 		a.log,
 		shutdownCh,
@@ -103,6 +130,11 @@ func (a *Server) Run() error {
 		a.log.Warn("timeout waiting for requests")
 	}
 
+	a.log.Info("closing all resources...")
+	if err := resourceGroup.CloseAll(); err != nil {
+		a.log.Error("resource group close failed", zap.Error(err))
+	}
+
 	a.log.Info("server stopped gracefully")
 	return nil
 }
@@ -115,7 +147,7 @@ func (a *Server) Close() {
 	}
 }
 
-func (a *Server) storageInitializer(ctx context.Context) *service.Storage {
+func (a *Server) storageInitializer(ctx context.Context) service.Storage {
 	var storage service.Storage
 
 	if a.cfg.DatabaseDSN != "" {
@@ -141,5 +173,5 @@ func (a *Server) storageInitializer(ctx context.Context) *service.Storage {
 		storage = memstorage.NewMemStorage(a.cfg, a.log)
 	}
 
-	return &storage
+	return storage
 }

@@ -2,10 +2,7 @@ package handler
 
 import (
 	"fmt"
-
 	"github.com/go-chi/chi/v5"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/observers"
-
 	"net/http"
 	"net/http/pprof"
 	"sync"
@@ -25,7 +22,8 @@ import (
 )
 
 func SetupHandler(
-	storage *service.Storage,
+	storage service.Storage,
+	metricsSubject metricsservice.EventPublisher,
 	activeRequests *sync.WaitGroup,
 	log *zap.Logger,
 	shutdownChan chan struct{},
@@ -49,22 +47,23 @@ func SetupHandler(
 		log,
 	)
 
-	pingHandler, err := newPingHandler(log, *storage)
+	pingHandler, err := newPingHandler(log, storage)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
 	setupPingRoutes(r, pingHandler)
 
-	mainPageHandler, err := newMainPageService(*storage)
+	mainPageHandler, err := newMainPageService(storage)
 	if err != nil {
 		return nil, fmt.Errorf("%w", err)
 	}
 	setupMainRoutes(r, mainPageHandler)
 
-	metricsHandler := newMetricsHandler(*storage, log, &cfg)
+	metricsHandler, err := newMetricsHandler(storage, metricsSubject, log)
+	if err != nil {
+		return nil, fmt.Errorf("%w", err)
+	}
 	setupMetricsRoutes(r, metricsHandler)
-
-	//r.Mount("/debug/pprof", pprofRoutes())
 
 	return r, nil
 }
@@ -115,25 +114,13 @@ func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {
 }
 
 // Metric
-func newMetricsHandler(storage service.Storage, log *zap.Logger, cfg *config.ServerFlags) *metrics.MetricsHandler {
-
-	metricsSubject := observers.NewEventPublisher()
-
-	loggerObserver := observers.NewMetricLogger(log)
-	metricsSubject.Register(loggerObserver)
-
-	if cfg.AuditFile != "" {
-		fileObserver := observers.NewFileObserver(cfg.AuditFile, log)
-		metricsSubject.Register(fileObserver)
-	}
-
-	if cfg.AuditURL != "" {
-		httpObserver := observers.NewHTTPObserver(cfg.AuditURL, log)
-		metricsSubject.Register(httpObserver)
-	}
-
+func newMetricsHandler(
+	storage service.Storage,
+	metricsSubject metricsservice.EventPublisher,
+	log *zap.Logger,
+) (*metrics.MetricsHandler, error) {
 	metricsService := metricsservice.NewMetricService(storage, metricsSubject)
-	return metrics.NewMetricsHandler(metricsService, log)
+	return metrics.NewMetricsHandler(metricsService, log), nil
 }
 
 func setupMetricsRoutes(r chi.Router, metricsHandler *metrics.MetricsHandler) {

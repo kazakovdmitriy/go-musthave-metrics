@@ -3,7 +3,43 @@
 Шаблон репозитория для трека «Сервер сбора метрик и алертинга».
 
 ## Оптимизация памяти
-Оптимизировал мидлварь и сервис gzip и mainpageservice получились следующие результаты
+Оптимизировал мидлварь и сервис gzip, и mainpageservice
+
+1. Использовал sync.Pool для компрессии/декомпрессии, что позволило переиспользовать объекты вместо создания новых на каждый запрос
+```go
+gzipReaderPool = sync.Pool{
+    New: func() interface{} {
+        return new(gzip.Reader)
+    },
+}
+
+gzipWriterPool = sync.Pool{
+New: func() interface{} {
+return gzip.NewWriter(io.Discard)
+},
+}
+```
+
+2. В main_page_service и dbstorage использовал strings.Builder вместо fmt.Sprintf 
+```go
+// Было:
+result += fmt.Sprintf("<li>%s = %d</li>\n", id, delta.Int64)
+
+// Стало:
+builder.WriteString("<li>")
+builder.WriteString(id)
+builder.WriteString(" = ")
+buf := strconv.AppendInt(make([]byte, 0, 20), delta.Int64, 10)
+builder.Write(buf)
+```
+
+3. В main_page_service использовал template для кеширования шаблонов
+
+```go
+template.New("mainpage").Parse(...)
+```
+
+Получил следующие результаты:
 
 | flat      | flat%   | sum%   | cum       | cum%   | function                                                              |
 |-----------|---------|--------|-----------|--------|-----------------------------------------------------------------------|
