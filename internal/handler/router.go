@@ -2,7 +2,10 @@ package handler
 
 import (
 	"fmt"
-	"github.com/go-chi/chi"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/observers"
+
 	"net/http"
 	"sync"
 
@@ -54,7 +57,7 @@ func SetupHandler(
 	mainPageHandler := newMainPageService(*storage)
 	setupMainRoutes(r, mainPageHandler)
 
-	metricsHandler := newMetricsHandler(*storage, log)
+	metricsHandler := newMetricsHandler(*storage, log, &cfg)
 	setupMetricsRoutes(r, metricsHandler)
 
 	return r, nil
@@ -103,8 +106,24 @@ func setupMainRoutes(r chi.Router, mainPageHandler *mainpage.MainPageHandler) {
 }
 
 // Metric
-func newMetricsHandler(storage service.Storage, log *zap.Logger) *metrics.MetricsHandler {
-	metricsService := metricsservice.NewMetricService(storage)
+func newMetricsHandler(storage service.Storage, log *zap.Logger, cfg *config.ServerFlags) *metrics.MetricsHandler {
+
+	metricsSubject := observers.NewEventPublisher()
+
+	loggerObserver := observers.NewMetricLogger(log)
+	metricsSubject.Register(loggerObserver)
+
+	if cfg.AuditFile != "" {
+		fileObserver := observers.NewFileObserver(cfg.AuditFile, log)
+		metricsSubject.Register(fileObserver)
+	}
+
+	if cfg.AuditURL != "" {
+		httpObserver := observers.NewHTTPObserver(cfg.AuditURL, log)
+		metricsSubject.Register(httpObserver)
+	}
+
+	metricsService := metricsservice.NewMetricService(storage, metricsSubject)
 	return metrics.NewMetricsHandler(metricsService, log)
 }
 

@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
+
 	"github.com/jackc/pgconn"
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
@@ -15,7 +17,6 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
-	"strings"
 )
 
 var _ service.Storage = (*dbstorage)(nil)

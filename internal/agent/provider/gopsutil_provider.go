@@ -2,6 +2,7 @@ package provider
 
 import (
 	"context"
+
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"github.com/shirou/gopsutil/v3/cpu"

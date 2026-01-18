@@ -2,10 +2,11 @@ package provider
 
 import (
 	"context"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"math/rand/v2"
 	"runtime"
+
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 )
 
 // RuntimeMetricsProvider поставщик метрик runtime

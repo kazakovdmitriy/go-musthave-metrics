@@ -1,8 +1,8 @@
-// sender/sender.go
 package sender
 
 import (
 	"context"
+
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"go.uber.org/zap"
@@ -12,6 +12,7 @@ import (
 type metricsSender struct {
 	workerPool     *WorkerPool
 	metricsService *metricsService
+	log            *zap.Logger
 }
 
 // NewMetricsSender создает новый отправитель метрик
@@ -29,18 +30,19 @@ func NewMetricsSender(client interfaces.HTTPClient, workers int, queueSize int, 
 	return &metricsSender{
 		workerPool:     workerPool,
 		metricsService: metricsService,
+		log:            logger,
 	}
 }
 
 // Send отправляет метрики на сервер через worker pool
-func (ms *metricsSender) Send(ctx context.Context, metrics model.MemoryMetrics, deltaCounter int64, logger *zap.Logger) error {
+func (ms *metricsSender) Send(ctx context.Context, metrics model.MemoryMetrics, deltaCounter int64) error {
 	task := func() error {
 		return ms.metricsService.send(ctx, metrics, deltaCounter)
 	}
 
 	submitted := ms.workerPool.Submit(task)
 	if !submitted {
-		logger.Warn("failed to submit metrics task to worker pool")
+		ms.log.Warn("failed to submit metrics task to worker pool")
 	}
 	return nil
 }

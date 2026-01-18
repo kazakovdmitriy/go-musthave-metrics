@@ -4,18 +4,24 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 )
 
 type metricsService struct {
-	storage service.Storage
+	storage  service.Storage
+	eventPub EventPublisher
 }
 
-func NewMetricService(storage service.Storage) *metricsService {
+func NewMetricService(
+	storage service.Storage,
+	eventPub EventPublisher,
+) *metricsService {
 	return &metricsService{
-		storage: storage,
+		storage:  storage,
+		eventPub: eventPub,
 	}
 }
 
@@ -27,10 +33,31 @@ func (s *metricsService) UpdateCounter(ctx context.Context, name string, value i
 	return s.storage.UpdateCounter(ctx, name, value)
 }
 
-func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metrics) error {
+func (s *metricsService) UpdateMetrics(ctx context.Context, metrics []model.Metrics, ipAddr string) error {
 	if err := s.storage.UpdateMetrics(ctx, metrics); err != nil {
 		return fmt.Errorf("failed to save metrics in storage: %w", err)
 	}
+
+	var metricsArr []string
+	for _, m := range metrics {
+		metricsArr = append(metricsArr, m.ID)
+	}
+
+	now := time.Now()
+	event := model.MetricProcessedEvent{
+		Timestamp: now,
+		TS:        now.UnixMilli(),
+		Metrics:   metricsArr,
+		IPAddr:    ipAddr,
+	}
+
+	go func() {
+		err := s.eventPub.Publish(event)
+		if err != nil {
+			fmt.Printf("failed to publish metrics: %v\n", err)
+		}
+	}()
+
 	return nil
 }
 

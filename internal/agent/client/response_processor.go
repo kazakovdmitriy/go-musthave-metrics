@@ -2,10 +2,11 @@ package client
 
 import (
 	"fmt"
-	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
 	"io"
 	"net/http"
 	"strings"
+
+	compressorservice "github.com/kazakovdmitriy/go-musthave-metrics/internal/service/compressor_service"
 )
 
 // ResponseProcessor обрабатывает ответы

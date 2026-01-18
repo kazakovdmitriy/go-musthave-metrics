@@ -14,7 +14,8 @@ func TestMetricsService_UpdateGauge(t *testing.T) {
 	defer ctrl.Finish()
 
 	storage := mocks.NewMockStorage(ctrl)
-	service := NewMetricService(storage)
+	eventPub := mocks.NewMockEventPublisher(ctrl)
+	service := NewMetricService(storage, eventPub)
 
 	ctx := context.Background()
 	storage.EXPECT().UpdateGauge(ctx, "test_gauge", 123.45).Times(1)
@@ -28,7 +29,8 @@ func TestMetricsService_UpdateCounter(t *testing.T) {
 	defer ctrl.Finish()
 
 	storage := mocks.NewMockStorage(ctrl)
-	service := NewMetricService(storage)
+	eventPub := mocks.NewMockEventPublisher(ctrl)
+	service := NewMetricService(storage, eventPub)
 
 	ctx := context.Background()
 	storage.EXPECT().UpdateCounter(ctx, "test_counter", int64(10)).Times(1)
@@ -42,7 +44,8 @@ func TestMetricsService_GetGauge_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	storage := mocks.NewMockStorage(ctrl)
-	service := NewMetricService(storage)
+	eventPub := mocks.NewMockEventPublisher(ctrl)
+	service := NewMetricService(storage, eventPub)
 
 	ctx := context.Background()
 	storage.EXPECT().GetGauge(ctx, "existing_gauge").Return(99.99, true)
@@ -57,7 +60,8 @@ func TestMetricsService_GetGauge_NotFound(t *testing.T) {
 	defer ctrl.Finish()
 
 	storage := mocks.NewMockStorage(ctrl)
-	service := NewMetricService(storage)
+	eventPub := mocks.NewMockEventPublisher(ctrl)
+	service := NewMetricService(storage, eventPub)
 
 	ctx := context.Background()
 	storage.EXPECT().GetGauge(ctx, "missing_gauge").Return(0.0, false)
@@ -72,7 +76,8 @@ func TestMetricsService_GetCounter_Success(t *testing.T) {
 	defer ctrl.Finish()
 
 	storage := mocks.NewMockStorage(ctrl)
-	service := NewMetricService(storage)
+	eventPub := mocks.NewMockEventPublisher(ctrl)
+	service := NewMetricService(storage, eventPub)
 
 	ctx := context.Background()
 	storage.EXPECT().GetCounter(ctx, "existing_counter").Return(int64(5), true)
@@ -87,7 +92,8 @@ func TestMetricsService_GetCounter_NotFound(t *testing.T) {
 	defer ctrl.Finish()
 
 	storage := mocks.NewMockStorage(ctrl)
-	service := NewMetricService(storage)
+	eventPub := mocks.NewMockEventPublisher(ctrl)
+	service := NewMetricService(storage, eventPub)
 
 	ctx := context.Background()
 	storage.EXPECT().GetCounter(ctx, "missing_counter").Return(int64(0), false)

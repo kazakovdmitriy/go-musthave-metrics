@@ -4,7 +4,6 @@ import (
 	"context"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
-	"go.uber.org/zap"
 )
 
 // HTTPClient интерфейс для HTTP клиента
@@ -15,7 +14,7 @@ type HTTPClient interface {
 
 // MetricsSender интерфейс для отправителя метрик
 type MetricsSender interface {
-	Send(ctx context.Context, metrics model.MemoryMetrics, deltaCounter int64, logger *zap.Logger) error
+	Send(ctx context.Context, metrics model.MemoryMetrics, deltaCounter int64) error
 	Stop()
 }
 
