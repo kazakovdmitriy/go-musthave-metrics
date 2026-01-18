@@ -17,9 +17,6 @@ func (m mockMainPageService) GetMainPage(_ context.Context) (string, error) {
 
 func ExampleMainPageHandler_GetMainPage() {
 	handler := mainpage.NewMainPageHandler(mockMainPageService{})
-	if handler == nil {
-		panic("handler is nil")
-	}
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()

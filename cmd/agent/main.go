@@ -12,7 +12,10 @@ import (
 )
 
 func main() {
-	cfg := config.ParseAgentConfig()
+	cfg, err := config.ParseAgentConfig()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	logg, err := logger.Initialize(cfg.LogLevel)
 	if err != nil {
