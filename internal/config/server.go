@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// generate:reset
 type ServerFlags struct {
 	ServerAddr      string   `env:"ADDRESS"`
 	LogLevel        string   `env:"LOGLEVEL" envDefault:"info"`
