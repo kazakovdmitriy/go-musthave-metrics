@@ -119,9 +119,7 @@ func processFile(filePath string, packages map[string]*packageInfo) {
 	pkgDir := filepath.Dir(filePath)
 
 	// Нормализуем путь (убираем ./ если есть)
-	if strings.HasPrefix(pkgDir, "./") {
-		pkgDir = pkgDir[2:]
-	}
+	pkgDir = strings.TrimPrefix(pkgDir, "./")
 
 	pkgInfo, exists := packages[pkgDir]
 	if !exists {
@@ -320,16 +318,11 @@ func collectNeededImports(pkgInfo *packageInfo) []importInfo {
 			if len(parts) > 1 {
 				// Убираем возможные префиксы (*, [], map[])
 				baseType := parts[0]
-				if strings.HasPrefix(baseType, "*") {
-					baseType = baseType[1:]
-				}
-				if strings.HasPrefix(baseType, "[]") {
-					baseType = baseType[2:]
-				}
+				baseType = strings.TrimPrefix(baseType, "*")
+				baseType = strings.TrimPrefix(baseType, "[]")
 				if strings.HasPrefix(baseType, "map[") {
 					// Для map[K]V, ищем закрывающую скобку
-					idx := strings.Index(baseType, "]")
-					if idx > 0 {
+					if idx := strings.Index(baseType, "]"); idx > 0 {
 						baseType = baseType[idx+1:]
 					}
 				}
