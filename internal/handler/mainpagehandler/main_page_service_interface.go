@@ -1,4 +1,4 @@
-package mainpage
+package mainpagehandler
 
 import "context"
 

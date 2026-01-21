@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -40,7 +41,8 @@ func main() {
 	}
 	defer server.Close()
 
-	if err := server.Run(); err != nil {
+	ctx := context.Background()
+	if err := server.Run(ctx); err != nil {
 		log.Error("application failed", zap.Error(err))
 		os.Exit(1)
 	}

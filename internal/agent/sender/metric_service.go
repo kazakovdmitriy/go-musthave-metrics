@@ -26,7 +26,7 @@ func (ms *metricsService) send(ctx context.Context, metrics model.MemoryMetrics,
 	metricsMap := metrics.ToMap()
 
 	if len(metricsMap) == 0 && deltaCounter == 0 {
-		ms.logger.Info("no metrics to send")
+		ms.logger.Info("no metricshandler to send")
 		return nil
 	}
 
@@ -51,14 +51,14 @@ func (ms *metricsService) send(ctx context.Context, metrics model.MemoryMetrics,
 	}
 
 	if len(batch) == 0 {
-		ms.logger.Info("no metrics to send after filtering")
+		ms.logger.Info("no metricshandler to send after filtering")
 		return nil
 	}
 
 	_, err := ms.client.Post(ctx, "/updates/", batch)
 	if err != nil {
 		ms.logger.Error(
-			"failed to send metrics batch",
+			"failed to send metricshandler batch",
 			zap.Int("metrics_count", len(batch)),
 			zap.Error(err),
 		)
@@ -66,7 +66,7 @@ func (ms *metricsService) send(ctx context.Context, metrics model.MemoryMetrics,
 	}
 
 	ms.logger.Debug(
-		"successfully sent metrics batch",
+		"successfully sent metricshandler batch",
 		zap.Int("metrics_count", len(batch)),
 	)
 

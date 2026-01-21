@@ -13,7 +13,7 @@ import (
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/pinghandler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
@@ -21,7 +21,7 @@ import (
 )
 
 var _ service.Storage = (*dbstorage)(nil)
-var _ ping.HealthChecker = (*dbstorage)(nil)
+var _ pinghandler.HealthChecker = (*dbstorage)(nil)
 
 type dbstorage struct {
 	db       *pgxpool.Pool

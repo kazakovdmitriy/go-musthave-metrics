@@ -4,7 +4,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/go-chi/chi/v5"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/mainpagehandler"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/metricshandler"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/compressor"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/pinghandler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/observers"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/mainpageservice"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/metricsservice"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/signerservice"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -15,7 +25,6 @@ import (
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config/db"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/dbstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/memstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
@@ -37,106 +46,39 @@ func NewApp(cfg *config.ServerFlags, log *zap.Logger) (*Server, error) {
 	return app, nil
 }
 
-func (a *Server) Run() error {
-	ctx := context.Background()
+func (s *Server) Run(ctx context.Context) error {
+	// 1. Инициализируем все зависимости
+	storage, subject, resources, err := s.initDependencies(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to init dependencies: %w", err)
+	}
 
-	resourceGroup := NewResourceGroup(a.log)
-
-	var activeRequests sync.WaitGroup
+	// 2. Создаем WaitGroup для активных запросов
+	activeRequests := &sync.WaitGroup{}
 	shutdownCh := make(chan struct{})
 
-	storage := a.storageInitializer(ctx)
-	resourceGroup.Register(storage)
-
-	metricsSubject := observers.NewEventPublisher()
-
-	loggerObserver := observers.NewMetricLogger(a.log)
-	metricsSubject.Register(loggerObserver)
-
-	if a.cfg.AuditFile != "" {
-		fileObserver, err := observers.NewFileObserver(a.cfg.AuditFile, a.log)
-		resourceGroup.Register(fileObserver)
-		if err != nil {
-			return fmt.Errorf("%w", err)
-		}
-		metricsSubject.Register(fileObserver)
-	}
-
-	if a.cfg.AuditURL != "" {
-		httpObserver, err := observers.NewHTTPObserver(a.cfg.AuditURL, a.log, a.cfg)
-		if err != nil {
-			return fmt.Errorf("%w", err)
-		}
-		metricsSubject.Register(httpObserver)
-		resourceGroup.Register(httpObserver)
-	}
-
-	router, err := handler.SetupHandler(
-		storage,
-		metricsSubject,
-		&activeRequests,
-		a.log,
-		shutdownCh,
-		*a.cfg,
-	)
+	// 3. Создаем роутер (все в одном месте)
+	router, err := s.createRouter(storage, subject, activeRequests, shutdownCh)
 	if err != nil {
-		return fmt.Errorf("router initialization error: %w", err)
+		return fmt.Errorf("failed to create router: %w", err)
 	}
 
-	a.server = &http.Server{
-		Addr:    a.cfg.ServerAddr,
+	// 4. Создаем HTTP сервер
+	s.server = &http.Server{
+		Addr:    s.cfg.ServerAddr,
 		Handler: router,
 	}
 
+	// 5. Запускаем сервер
 	go func() {
-		a.log.Info("server starting", zap.String("addr", a.cfg.ServerAddr))
-		if err := a.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			a.log.Error("server failed to start", zap.Error(err))
+		s.log.Info("server starting", zap.String("addr", s.cfg.ServerAddr))
+		if err := s.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			s.log.Error("server failed to start", zap.Error(err))
 		}
 	}()
 
-	ctx, stop := signal.NotifyContext(
-		ctx,
-		os.Interrupt,
-		syscall.SIGTERM,
-		syscall.SIGINT,
-		syscall.SIGQUIT,
-	)
-	defer stop()
-
-	<-ctx.Done()
-
-	a.log.Info("graceful shutdown initiated")
-	close(shutdownCh)
-
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
-	defer cancel()
-
-	if err := a.server.Shutdown(shutdownCtx); err != nil {
-		a.log.Error("server shutdown failed", zap.Error(err))
-	}
-
-	a.log.Info("waiting for active requests to complete...")
-	waitDone := make(chan struct{})
-	go func() {
-		activeRequests.Wait()
-		close(waitDone)
-	}()
-
-	select {
-	case <-waitDone:
-		a.log.Info("all requests completed")
-	case <-time.After(10 * time.Second):
-		a.log.Warn("timeout waiting for requests")
-	}
-
-	a.log.Info("closing all resources...")
-	if err := resourceGroup.CloseAll(); err != nil {
-		a.log.Error("resource group close failed", zap.Error(err))
-	}
-
-	a.log.Info("server stopped gracefully")
-	return nil
+	// 6. Graceful shutdown
+	return s.waitForShutdown(ctx, resources, activeRequests, shutdownCh)
 }
 
 func (a *Server) Close() {
@@ -147,31 +89,221 @@ func (a *Server) Close() {
 	}
 }
 
-func (a *Server) storageInitializer(ctx context.Context) service.Storage {
-	var storage service.Storage
+func (s *Server) initDependencies(ctx context.Context) (
+	service.Storage,
+	metricsservice.EventPublisher,
+	[]closableResource,
+	error,
+) {
+	var resources []closableResource
 
-	if a.cfg.DatabaseDSN != "" {
-		dbase, err := db.NewDatabase(ctx, a.cfg.DatabaseDSN)
-		if err != nil {
-			a.log.Warn("Failed to connect to DB, falling back to in-memory storage", zap.Error(err))
-			storage = memstorage.NewMemStorage(a.cfg, a.log)
-		} else if !dbase.IsConnected() {
-			a.log.Warn("DB connection is not active, falling back to in-memory storage")
-			storage = memstorage.NewMemStorage(a.cfg, a.log)
-		} else {
-			migrator := db.NewMigrator(a.cfg.DatabaseDSN, "migrations", a.log)
-			if err := migrator.Up(); err != nil {
-				a.log.Error("migration failed", zap.Error(err))
-			}
-			storage, err = dbstorage.NewDBStorage(dbase.Pool, a.log, a.cfg)
-			if err != nil {
-				a.log.Warn("Failed to connect to DB, falling back to in-memory storage", zap.Error(err))
-			}
-		}
-	} else {
-		a.log.Info("No database DSN provided, using in-memory storage")
-		storage = memstorage.NewMemStorage(a.cfg, a.log)
+	// Инициализация хранилища
+	storage, err := s.initStorage(ctx)
+	if err != nil {
+		return nil, nil, nil, fmt.Errorf("Stirage %w", err)
+	}
+	resources = append(resources, storage)
+
+	// Инициализация наблюдателей
+	subject, observerResources, err := s.initObservers()
+	if err != nil {
+		return nil, nil, resources, fmt.Errorf("observers: %w", err)
+	}
+	resources = append(resources, observerResources...)
+
+	return storage, subject, resources, nil
+
+}
+
+func (s *Server) initStorage(ctx context.Context) (service.Storage, error) {
+	if s.cfg.DatabaseDSN == "" {
+		s.log.Info("using in-memory storage")
+		return memstorage.NewMemStorage(s.cfg, s.log), nil
 	}
 
-	return storage
+	// Пробуем подключиться к БД
+	dbase, err := db.NewDatabase(ctx, s.cfg.DatabaseDSN)
+	if err != nil || !dbase.IsConnected() {
+		s.log.Warn("database connection failed, falling back to memory", zap.Error(err))
+		return memstorage.NewMemStorage(s.cfg, s.log), nil
+	}
+
+	// Миграции
+	migrator := db.NewMigrator(s.cfg.DatabaseDSN, "migrations", s.log)
+	if err := migrator.Up(); err != nil {
+		s.log.Error("migration failed", zap.Error(err))
+	}
+
+	// Хранилище БД
+	storage, err := dbstorage.NewDBStorage(dbase.Pool, s.log, s.cfg)
+	if err != nil {
+		s.log.Warn("DB storage init failed, falling back to memory", zap.Error(err))
+		return memstorage.NewMemStorage(s.cfg, s.log), nil
+	}
+
+	return storage, nil
+}
+
+func (s *Server) initObservers() (
+	metricsservice.EventPublisher,
+	[]closableResource,
+	error,
+) {
+	subject := observers.NewEventPublisher()
+	var resources []closableResource
+
+	// Логирующий наблюдатель
+	loggerObserver := observers.NewMetricLogger(s.log)
+	subject.Register(loggerObserver)
+
+	// Файловый наблюдатель
+	if s.cfg.AuditFile != "" {
+		fileObserver, err := observers.NewFileObserver(s.cfg.AuditFile, s.log)
+		if err != nil {
+			return nil, resources, fmt.Errorf("file observer: %w", err)
+		}
+		subject.Register(fileObserver)
+		resources = append(resources, fileObserver)
+	}
+
+	// HTTP наблюдатель
+	if s.cfg.AuditURL != "" {
+		httpObserver, err := observers.NewHTTPObserver(s.cfg.AuditURL, s.log, s.cfg)
+		if err != nil {
+			return nil, resources, fmt.Errorf("HTTP observer: %w", err)
+		}
+		subject.Register(httpObserver)
+		resources = append(resources, httpObserver)
+	}
+
+	return subject, resources, nil
+}
+
+// createRouter создает и настраивает роутер со всеми middleware и хендлерами
+func (s *Server) createRouter(
+	storage service.Storage,
+	subject metricsservice.EventPublisher,
+	activeRequests *sync.WaitGroup,
+	shutdownCh chan struct{},
+) (http.Handler, error) {
+	r := chi.NewRouter()
+
+	// MIDDLEWARE: Создаем сервисы для middleware
+	compressorService := compressor.NewHTTPGzipAdapter()
+
+	var signerService signer.Signer
+	if s.cfg.SecretKet != "" {
+		signerService = signerservice.NewSHA256Signer(s.cfg.SecretKet)
+	}
+
+	// MIDDLEWARE: Устанавливаем middleware
+	r.Use(middlewares.RequestLogger(s.log))
+	r.Use(middlewares.ResponseLogger(s.log))
+	r.Use(middlewares.TrackActiveRequests(activeRequests, shutdownCh))
+	r.Use(middlewares.RateLimiter(s.cfg.RateLimit, s.log))
+	r.Use(compressor.Compress(compressorService, s.log))
+
+	if signerService != nil {
+		r.Use(signer.HashValidationMiddleware(signerService, s.log))
+	}
+
+	// HANDLERS: Создаем сервисы и хендлеры
+	mainPageService, err := mainpageservice.NewMainPageService(storage)
+	if err != nil {
+		return nil, fmt.Errorf("main page service: %w", err)
+	}
+
+	metricsService := metricsservice.NewMetricService(storage, subject)
+
+	pingHandler := pinghandler.NewPingHandler(s.log, storage)
+	mainPageHandler := mainpagehandler.NewMainPageHandler(mainPageService)
+	metricsHandler := metricshandler.NewMetricsHandler(metricsService, s.log)
+
+	// ROUTES: Настраиваем все маршруты
+	r.Route("/pinghandler", func(r chi.Router) {
+		r.Get("/", pingHandler.GetPingDB)
+	})
+
+	r.Route("/", func(r chi.Router) {
+		r.Get("/", mainPageHandler.GetMainPage)
+	})
+
+	r.Route("/update", func(r chi.Router) {
+		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
+			r.Post("/{value}", metricsHandler.UpdateMetric)
+		})
+		r.Post("/", metricsHandler.UpdatePost)
+	})
+
+	r.Route("/updates", func(r chi.Router) {
+		r.Post("/", metricsHandler.UpdateMetrics)
+	})
+
+	r.Route("/value", func(r chi.Router) {
+		r.Route("/{metricType}/{metricName}", func(r chi.Router) {
+			r.Get("/", metricsHandler.GetMetric)
+		})
+		r.Post("/", metricsHandler.SentMetricPost)
+	})
+
+	return r, nil
+}
+
+func (s *Server) waitForShutdown(
+	ctx context.Context,
+	resources []closableResource,
+	activeRequests *sync.WaitGroup,
+	shutdownCh chan struct{},
+) error {
+	ctx, stop := signal.NotifyContext(ctx,
+		os.Interrupt,
+		syscall.SIGTERM,
+		syscall.SIGINT,
+		syscall.SIGQUIT,
+	)
+	defer stop()
+
+	<-ctx.Done()
+
+	s.log.Info("graceful shutdown initiated")
+	close(shutdownCh)
+
+	// Останавливаем HTTP сервер
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	if err := s.server.Shutdown(shutdownCtx); err != nil {
+		s.log.Error("server shutdown failed", zap.Error(err))
+	}
+
+	// Ждем завершения запросов
+	s.log.Info("waiting for active requests...")
+	waitDone := make(chan struct{})
+	go func() {
+		activeRequests.Wait()
+		close(waitDone)
+	}()
+
+	select {
+	case <-waitDone:
+		s.log.Info("all requests completed")
+	case <-time.After(10 * time.Second):
+		s.log.Warn("timeout waiting for requests")
+	}
+
+	// Закрываем ресурсы
+	s.log.Info("closing resources...")
+	for _, resource := range resources {
+		if err := resource.Close(); err != nil {
+			s.log.Error("resource close error", zap.Error(err))
+		}
+	}
+
+	s.log.Info("server stopped")
+	return nil
+}
+
+// Интерфейс для ресурсов, которые нужно закрыть
+type closableResource interface {
+	Close() error
 }

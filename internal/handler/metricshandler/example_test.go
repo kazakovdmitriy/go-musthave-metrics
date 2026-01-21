@@ -1,10 +1,10 @@
-package metrics_test
+package metricshandler_test
 
 import (
 	"context"
 	"fmt"
 	"github.com/go-chi/chi/v5"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/metrics"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/metricshandler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"go.uber.org/zap"
 	"net/http"
@@ -31,7 +31,7 @@ func (m mockMetricsService) UpdateMetrics(_ context.Context, metrics []model.Met
 
 func ExampleMetricsHandler_GetMetric_gauge() {
 	log, _ := zap.NewDevelopment()
-	handler := metrics.NewMetricsHandler(mockMetricsService{}, log)
+	handler := metricshandler.NewMetricsHandler(mockMetricsService{}, log)
 
 	r := chi.NewRouter()
 	r.Get("/value/{metricType}/{metricName}", handler.GetMetric)

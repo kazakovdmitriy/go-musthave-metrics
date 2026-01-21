@@ -1,10 +1,10 @@
-// internal/handler/mainpage/example_test.go
-package mainpage_test
+// internal/handler/mainpagehandler/example_test.go
+package mainpagehandler_test
 
 import (
 	"context"
 	"fmt"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/mainpage"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/mainpagehandler"
 	"net/http"
 	"net/http/httptest"
 )
@@ -16,7 +16,7 @@ func (m mockMainPageService) GetMainPage(_ context.Context) (string, error) {
 }
 
 func ExampleMainPageHandler_GetMainPage() {
-	handler := mainpage.NewMainPageHandler(mockMainPageService{})
+	handler := mainpagehandler.NewMainPageHandler(mockMainPageService{})
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	w := httptest.NewRecorder()
