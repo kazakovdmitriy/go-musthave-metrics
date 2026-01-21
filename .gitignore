@@ -34,3 +34,4 @@ audit.json
 
 internal/config/*.gen.go
 internal/model/*.gen.go
+/metricshandler.json
