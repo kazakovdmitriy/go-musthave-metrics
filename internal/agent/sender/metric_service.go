@@ -10,14 +10,16 @@ import (
 
 // metricsService содержит общую логику отправки метрик
 type metricsService struct {
-	client interfaces.HTTPClient
-	logger *zap.Logger
+	client    interfaces.HTTPClient
+	logger    *zap.Logger
+	batchPool *MetricsBatchPool
 }
 
 func newMetricsService(client interfaces.HTTPClient, logger *zap.Logger) *metricsService {
 	return &metricsService{
-		client: client,
-		logger: logger,
+		client:    client,
+		logger:    logger,
+		batchPool: NewMetricsBatchPool(20),
 	}
 }
 
@@ -30,7 +32,11 @@ func (ms *metricsService) send(ctx context.Context, metrics model.MemoryMetrics,
 		return nil
 	}
 
-	var batch []model.Metrics
+	// Берем батч из пула
+	batchWrapper := ms.batchPool.GetBatch()
+	defer ms.batchPool.PutBatch(batchWrapper)
+
+	batch := batchWrapper.Slice
 
 	for name, value := range metricsMap {
 		valueCopy := value
