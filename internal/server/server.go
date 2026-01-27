@@ -81,10 +81,10 @@ func (s *Server) Run(ctx context.Context) error {
 	return s.waitForShutdown(ctx, resources, activeRequests, shutdownCh)
 }
 
-func (a *Server) Close() {
-	if a.storage != nil {
-		if err := a.storage.Close(); err != nil {
-			a.log.Error("storage close failed", zap.Error(err))
+func (s *Server) Close() {
+	if s.storage != nil {
+		if err := s.storage.Close(); err != nil {
+			s.log.Error("storage close failed", zap.Error(err))
 		}
 	}
 }
