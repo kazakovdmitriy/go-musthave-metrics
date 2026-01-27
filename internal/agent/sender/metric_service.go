@@ -10,14 +10,16 @@ import (
 
 // metricsService содержит общую логику отправки метрик
 type metricsService struct {
-	client interfaces.HTTPClient
-	logger *zap.Logger
+	client    interfaces.HTTPClient
+	logger    *zap.Logger
+	batchPool *MetricsBatchPool
 }
 
 func newMetricsService(client interfaces.HTTPClient, logger *zap.Logger) *metricsService {
 	return &metricsService{
-		client: client,
-		logger: logger,
+		client:    client,
+		logger:    logger,
+		batchPool: NewMetricsBatchPool(20),
 	}
 }
 
@@ -26,11 +28,15 @@ func (ms *metricsService) send(ctx context.Context, metrics model.MemoryMetrics,
 	metricsMap := metrics.ToMap()
 
 	if len(metricsMap) == 0 && deltaCounter == 0 {
-		ms.logger.Info("no metrics to send")
+		ms.logger.Info("no metricshandler to send")
 		return nil
 	}
 
-	var batch []model.Metrics
+	// Берем батч из пула
+	batchWrapper := ms.batchPool.GetBatch()
+	defer ms.batchPool.PutBatch(batchWrapper)
+
+	batch := batchWrapper.Slice
 
 	for name, value := range metricsMap {
 		valueCopy := value
@@ -51,14 +57,14 @@ func (ms *metricsService) send(ctx context.Context, metrics model.MemoryMetrics,
 	}
 
 	if len(batch) == 0 {
-		ms.logger.Info("no metrics to send after filtering")
+		ms.logger.Info("no metricshandler to send after filtering")
 		return nil
 	}
 
 	_, err := ms.client.Post(ctx, "/updates/", batch)
 	if err != nil {
 		ms.logger.Error(
-			"failed to send metrics batch",
+			"failed to send metricshandler batch",
 			zap.Int("metrics_count", len(batch)),
 			zap.Error(err),
 		)
@@ -66,7 +72,7 @@ func (ms *metricsService) send(ctx context.Context, metrics model.MemoryMetrics,
 	}
 
 	ms.logger.Debug(
-		"successfully sent metrics batch",
+		"successfully sent metricshandler batch",
 		zap.Int("metrics_count", len(batch)),
 	)
 
