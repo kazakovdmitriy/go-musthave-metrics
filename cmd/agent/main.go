@@ -2,7 +2,9 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
+	"os"
 	"os/signal"
 	"syscall"
 
@@ -11,7 +13,16 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 )
 
+// Глобальные переменные для информации о сборке
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
+	printBuildInfo()
+
 	cfg, err := config.ParseAgentConfig()
 	if err != nil {
 		log.Fatal(err)
@@ -35,4 +46,10 @@ func main() {
 	app.Wait()
 
 	logg.Info("application shutdown complete")
+}
+
+func printBuildInfo() {
+	fmt.Fprintf(os.Stdout, "Build version: %s\n", buildVersion)
+	fmt.Fprintf(os.Stdout, "Build date: %s\n", buildDate)
+	fmt.Fprintf(os.Stdout, "Build commit: %s\n", buildCommit)
 }
