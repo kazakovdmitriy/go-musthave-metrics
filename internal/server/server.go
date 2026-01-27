@@ -100,7 +100,7 @@ func (s *Server) initDependencies(ctx context.Context) (
 	// Инициализация хранилища
 	storage, err := s.initStorage(ctx)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("Stirage %w", err)
+		return nil, nil, nil, fmt.Errorf("stirage %w", err)
 	}
 	resources = append(resources, storage)
 
