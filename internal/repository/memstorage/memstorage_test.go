@@ -85,7 +85,7 @@ func TestMemStorage_GetAllMetrics_Empty(t *testing.T) {
 	ctx := context.Background()
 	_, err := storage.GetAllMetrics(ctx)
 	assert.Error(t, err)
-	assert.Equal(t, "no metrics found", err.Error())
+	assert.Equal(t, "no metricshandler found", err.Error())
 }
 
 func TestMemStorage_ConcurrentAccess(t *testing.T) {

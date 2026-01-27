@@ -1,5 +1,5 @@
 // example_test.go
-package ping_test
+package pinghandler_test
 
 import (
 	"fmt"
@@ -8,11 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/ping"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/pinghandler"
 	"go.uber.org/zap"
 )
 
-// ExamplePingHandler_GetPingDB demonstrates how to use the /ping endpoint.
+// ExamplePingHandler_GetPingDB demonstrates how to use the /pinghandler endpoint.
 func ExamplePingHandler_GetPingDB() {
 	ctrl := gomock.NewController(nil)
 	defer ctrl.Finish()
@@ -21,9 +21,9 @@ func ExamplePingHandler_GetPingDB() {
 	mockStorage.EXPECT().Ping(gomock.Any()).Return(nil)
 
 	log, _ := zap.NewDevelopment()
-	handler := ping.NewPingHandler(log, mockStorage)
+	handler := pinghandler.NewPingHandler(log, mockStorage)
 
-	req := httptest.NewRequest(http.MethodGet, "/ping/", nil)
+	req := httptest.NewRequest(http.MethodGet, "/pinghandler/", nil)
 	w := httptest.NewRecorder()
 
 	handler.GetPingDB(w, req)
