@@ -1,6 +1,6 @@
-// Package ping предоставляет HTTP-хендлер для проверки доступности хранилища (например, базы данных)
-// через эндпоинт /ping.
-package ping
+// Package pinghandler предоставляет HTTP-хендлер для проверки доступности хранилища (например, базы данных)
+// через эндпоинт /pinghandler.
+package pinghandler
 
 import (
 	"context"
@@ -11,7 +11,7 @@ import (
 	"go.uber.org/zap"
 )
 
-// PingHandler обрабатывает HTTP-запросы к эндпоинту /ping,
+// PingHandler обрабатывает HTTP-запросы к эндпоинту /pinghandler,
 // позволяя клиентам проверить, доступно ли хранилище метрик.
 type PingHandler struct {
 	log     *zap.Logger
@@ -28,7 +28,7 @@ func NewPingHandler(log *zap.Logger, storage service.Storage) *PingHandler {
 	}
 }
 
-// GetPingDB обрабатывает GET-запрос к /ping.
+// GetPingDB обрабатывает GET-запрос к /pinghandler.
 // Пытается выполнить health-check хранилища с таймаутом 3 секунды.
 // Если хранилище не реализует HealthChecker — возвращает 500 Internal Server Error.
 // Если проверка завершилась ошибкой — логирует предупреждение и возвращает 500.
@@ -38,7 +38,7 @@ func (h *PingHandler) GetPingDB(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := h.storage.Ping(ctx); err != nil {
-		h.log.Warn("Failed to ping database", zap.Error(err))
+		h.log.Warn("Failed to pinghandler database", zap.Error(err))
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}

@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"os"
@@ -12,7 +13,16 @@ import (
 	"go.uber.org/zap"
 )
 
+// Глобальные переменные для информации о сборке
+var (
+	buildVersion = "N/A"
+	buildDate    = "N/A"
+	buildCommit  = "N/A"
+)
+
 func main() {
+	printBuildInfo()
+
 	cfg := config.ParseServerConfig()
 
 	log, err := logger.Initialize(cfg.LogLevel)
@@ -40,10 +50,17 @@ func main() {
 	}
 	defer server.Close()
 
-	if err := server.Run(); err != nil {
+	ctx := context.Background()
+	if err := server.Run(ctx); err != nil {
 		log.Error("application failed", zap.Error(err))
 		os.Exit(1)
 	}
 
 	wg.Wait()
+}
+
+func printBuildInfo() {
+	fmt.Fprintf(os.Stdout, "Build version: %s\n", buildVersion)
+	fmt.Fprintf(os.Stdout, "Build date: %s\n", buildDate)
+	fmt.Fprintf(os.Stdout, "Build commit: %s\n", buildCommit)
 }
