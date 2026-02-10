@@ -6,6 +6,7 @@ import (
 )
 
 // MemoryMetrics представляет метрики памяти
+// generate:reset
 type MemoryMetrics struct {
 	Alloc         float64 `json:"alloc"`
 	BuckHashSys   float64 `json:"buck_hash_sys"`

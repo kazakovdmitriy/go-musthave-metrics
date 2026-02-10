@@ -9,6 +9,7 @@ import (
 	"github.com/spf13/pflag"
 )
 
+// generate:reset
 type AgentFlags struct {
 	ServerAddr      string   `env:"ADDRESS"`
 	ReportInterval  int      `env:"REPORT_INTERVAL"`
