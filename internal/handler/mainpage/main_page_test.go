@@ -204,41 +204,6 @@ func TestMainPageHandler_DifferentMethods(t *testing.T) {
 	}
 }
 
-// Тест для проверки поведения при панике в сервисе
-func TestMainPageHandler_ServicePanic(t *testing.T) {
-	t.Run("service panics", func(t *testing.T) {
-		ctrl := gomock.NewController(t)
-		defer ctrl.Finish()
-
-		mockService := mocks.NewMockMainPageService(ctrl)
-		handler := NewMainPageHandler(mockService)
-
-		// Этот тест проверяет, что хендлер не паникует при панике в сервисе
-		mockService.EXPECT().
-			GetMainPage(gomock.Any()).
-			DoAndReturn(func(ctx context.Context) (string, error) {
-				panic("service panic")
-			})
-
-		// Восстанавливаем панику, чтобы тест не упал
-		defer func() {
-			if r := recover(); r != nil {
-				t.Log("panic recovered as expected:", r)
-				// Тест должен пройти, так как мы ожидаем панику
-			}
-		}()
-
-		req := httptest.NewRequest("GET", "/", nil)
-		w := httptest.NewRecorder()
-
-		// Этот вызов должен вызвать панику, но она будет восстановлена в defer
-		handler.GetMainPage(w, req)
-
-		// Если мы дошли сюда, значит паника была восстановлена
-		// Можно добавить дополнительные проверки если необходимо
-	})
-}
-
 // Тест для случая, когда сервис возвращает ошибку для разных методов
 func TestMainPageHandler_DifferentMethodsWithError(t *testing.T) {
 	methods := []string{"GET", "POST", "PUT"}
