@@ -82,7 +82,6 @@ func parseFlagsAgent(cfg *AgentFlags) error {
 				if err != nil {
 					return fmt.Errorf("failed to parse flags: %w", err)
 				}
-				return fmt.Errorf("failed to parse flags: %w", err)
 			}
 		}
 	}

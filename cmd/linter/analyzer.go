@@ -2,6 +2,7 @@ package main
 
 import (
 	"go/ast"
+	"go/types"
 	"golang.org/x/tools/go/analysis"
 	"golang.org/x/tools/go/analysis/passes/inspect"
 	"golang.org/x/tools/go/ast/inspector"
@@ -39,9 +40,20 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		// Проверка log.Fatal() и os.Exit()
 		if selExpr, ok := callExpr.Fun.(*ast.SelectorExpr); ok {
-			if xIdent, ok := selExpr.X.(*ast.Ident); ok {
-				pkgName := xIdent.Name
+			if pkgIdent, ok := selExpr.X.(*ast.Ident); ok {
 				funcName := selExpr.Sel.Name
+
+				obj, exists := pass.TypesInfo.Uses[pkgIdent]
+				if !exists {
+					return
+				}
+
+				pkgNameObj, ok := obj.(*types.PkgName)
+				if !ok {
+					return
+				}
+
+				pkgName := pkgNameObj.Pkg().Path()
 
 				// Проверка на log.Fatal или log.Fatal*
 				if pkgName == "log" && strings.HasPrefix(funcName, "Fatal") {
@@ -58,7 +70,10 @@ func run(pass *analysis.Pass) (interface{}, error) {
 				// Проверка на os.Exit()
 				if pkgName == "os" && funcName == "Exit" {
 					if !isInMainFunction(pass, node) {
-						pass.Reportf(callExpr.Pos(), "os.Exit() should only be called from main function in main package called from os.Exit")
+						pass.Reportf(
+							callExpr.Pos(),
+							"os.Exit() should only be called from main function in main package called from os.Exit",
+						)
 					}
 					return
 				}
