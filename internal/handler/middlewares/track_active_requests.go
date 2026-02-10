@@ -5,6 +5,8 @@ import (
 	"sync"
 )
 
+// TrackActiveRequests мидлварь нужная для graceful shutdown
+// возвращает ошибку 503 для новых запросов при получении сигнала из shutdownChan
 func TrackActiveRequests(
 	activeRequests *sync.WaitGroup,
 	shutdownChan chan struct{},

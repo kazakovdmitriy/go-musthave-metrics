@@ -1,6 +1,6 @@
-// Package metrics предоставляет HTTP-хендлеры для работы с метриками приложения:
+// Package metricshandler предоставляет HTTP-хендлеры для работы с метриками приложения:
 // получение, обновление и пакетное сохранение значений типа gauge и counter.
-package metrics
+package metricshandler
 
 import (
 	"context"

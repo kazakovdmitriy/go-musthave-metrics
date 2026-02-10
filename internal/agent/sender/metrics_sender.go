@@ -42,7 +42,7 @@ func (ms *metricsSender) Send(ctx context.Context, metrics model.MemoryMetrics, 
 
 	submitted := ms.workerPool.Submit(task)
 	if !submitted {
-		ms.log.Warn("failed to submit metrics task to worker pool")
+		ms.log.Warn("failed to submit metricshandler task to worker pool")
 	}
 	return nil
 }

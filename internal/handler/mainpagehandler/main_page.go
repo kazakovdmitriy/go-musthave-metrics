@@ -1,5 +1,5 @@
-// Package mainpage предоставляет HTTP-хендлер для отображения главной страницы.
-package mainpage
+// Package mainpagehandler предоставляет HTTP-хендлер для отображения главной страницы.
+package mainpagehandler
 
 import (
 	"net/http"
