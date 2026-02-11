@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"fmt"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
 	"sync"
 	"time"
 
@@ -12,7 +13,6 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/provider"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/reporter"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/sender"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/signerservice"
 	"go.uber.org/zap"

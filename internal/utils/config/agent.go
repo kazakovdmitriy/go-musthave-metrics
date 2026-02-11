@@ -19,6 +19,7 @@ type AgentFlags struct {
 	RateLimit       int      `env:"RATE_LIMIT"`
 	MaxRetries      int      `env:"MAX_RETRIES"`
 	RetryDelays     []string `env:"RETRY_DELAYS"`
+	CryptoKeyPath   string   `env:"CRYPTO_KEY"`
 }
 
 func ParseAgentConfig() (*AgentFlags, error) {
@@ -64,6 +65,7 @@ func parseFlagsAgent(cfg *AgentFlags) error {
 	flags.IntVarP(&cfg.RateLimit, "ratelimit", "l", 0, "Rate limit")
 	flags.IntVarP(&cfg.MaxRetries, "max-retries", "m", 3, "Maximum number of retry attempts")
 	flags.StringArrayVarP(&cfg.RetryDelays, "retry-delays", "d", []string{"1s", "3s", "5s"}, "Retry delays between attempts")
+	flags.StringVarP(&cfg.CryptoKeyPath, "crypto-key", "c", "", "CryptoKeyPath")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		_, err := fmt.Fprintf(os.Stderr, "Error: %v\n", err)

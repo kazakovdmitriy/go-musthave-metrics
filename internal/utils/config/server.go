@@ -24,6 +24,7 @@ type ServerFlags struct {
 	RetryDelays     []string `env:"RETRY_DELAYS"`
 	AuditFile       string   `env:"AUDIT_FILE"`
 	AuditURL        string   `env:"AUDIT_URL"`
+	CryptoKeyPath   string   `env:"CRYPTO_KEY"`
 }
 
 func ParseServerConfig() *ServerFlags {
@@ -69,6 +70,7 @@ func parseServerFlag(cfg *ServerFlags) {
 	flags.StringArrayVarP(&cfg.RetryDelays, "retry-delays", "s", []string{"1s", "3s", "5s"}, "Retry delays between attempts")
 	flags.StringVarP(&cfg.AuditFile, "audit-file", "z", "", "Path to audit log file")
 	flags.StringVarP(&cfg.AuditURL, "audit-url", "u", "", "URL to audit log file")
+	flags.StringVarP(&cfg.CryptoKeyPath, "crypto-key", "c", "", "CryptoKeyPath")
 
 	if err := flags.Parse(os.Args[1:]); err != nil {
 		log.Printf("Error parsing command-line flags: %v", err)

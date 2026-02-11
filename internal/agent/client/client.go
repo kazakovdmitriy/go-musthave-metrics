@@ -4,15 +4,15 @@ import (
 	"compress/gzip"
 	"context"
 	"fmt"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/crypto"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/retry"
 	"net/http"
 	"strings"
 	"time"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent/interfaces"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/middlewares/signer"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	"go.uber.org/zap"
 )
 
@@ -25,6 +25,7 @@ type Client struct {
 	responseProcessor *ResponseProcessor
 	logger            *zap.Logger
 	cfg               *config.AgentFlags
+	cryptoService     *crypto.CryptoService
 }
 
 // NewClient создает новый клиент с ограничением или без
@@ -36,7 +37,23 @@ func NewClient(
 ) (interfaces.HTTPClient, error) {
 	baseURL = normalizeURL(baseURL)
 
-	requestProcessor, err := NewRequestProcessor(signer, true, gzip.DefaultCompression)
+	var cryptoService *crypto.CryptoService
+	if cfg.CryptoKeyPath != "" {
+		var err error
+		cryptoService, err = crypto.NewCryptoService(cfg.CryptoKeyPath, true) // true = агент
+		if err != nil {
+			logger.Warn("crypto: failed to initialize", zap.Error(err), zap.String("path", cfg.CryptoKeyPath))
+		} else if cryptoService.IsEnabled() {
+			logger.Info("crypto: encryption enabled", zap.String("path", cfg.CryptoKeyPath))
+		}
+	}
+
+	requestProcessor, err := NewRequestProcessor(
+		signer,
+		true,
+		gzip.DefaultCompression,
+		cryptoService,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -51,6 +68,7 @@ func NewClient(
 		responseProcessor: &ResponseProcessor{},
 		logger:            logger,
 		cfg:               cfg,
+		cryptoService:     cryptoService,
 	}, nil
 }
 

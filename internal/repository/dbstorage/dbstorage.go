@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/retry"
 	"strconv"
 	"strings"
 
@@ -12,10 +14,8 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v4"
 	"github.com/jackc/pgx/v4/pgxpool"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/handler/pinghandler"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/retry"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"
 )

@@ -3,14 +3,14 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/logger"
 	"log"
 	"os"
 	"os/signal"
 	"syscall"
 
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/agent"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 )
 
 // Глобальные переменные для информации о сборке
