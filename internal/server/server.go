@@ -15,6 +15,8 @@ import (
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/mainpageservice"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/metricsservice"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service/signerservice"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
+	db2 "github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config/db"
 	"net/http"
 	_ "net/http/pprof"
 	"os"
@@ -23,8 +25,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config/db"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/dbstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/repository/memstorage"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
@@ -122,14 +122,14 @@ func (s *Server) initStorage(ctx context.Context) (service.Storage, error) {
 	}
 
 	// Пробуем подключиться к БД
-	dbase, err := db.NewDatabase(ctx, s.cfg.DatabaseDSN)
+	dbase, err := db2.NewDatabase(ctx, s.cfg.DatabaseDSN)
 	if err != nil || !dbase.IsConnected() {
 		s.log.Warn("database connection failed, falling back to memory", zap.Error(err))
 		return memstorage.NewMemStorage(s.cfg, s.log), nil
 	}
 
 	// Миграции
-	migrator := db.NewMigrator(s.cfg.DatabaseDSN, "migrations", s.log)
+	migrator := db2.NewMigrator(s.cfg.DatabaseDSN, "migrations", s.log)
 	if err := migrator.Up(); err != nil {
 		s.log.Error("migration failed", zap.Error(err))
 	}
@@ -196,11 +196,17 @@ func (s *Server) createRouter(
 		signerService = signerservice.NewSHA256Signer(s.cfg.SecretKet)
 	}
 
+	decryptor, err := middlewares.NewDecryptor(s.cfg.CryptoKeyPath, s.log)
+	if err != nil {
+		s.log.Fatal("failed to initialize decryptor", zap.Error(err))
+	}
+
 	// MIDDLEWARE: Устанавливаем middleware
 	r.Use(middlewares.RequestLogger(s.log))
 	r.Use(middlewares.ResponseLogger(s.log))
 	r.Use(middlewares.TrackActiveRequests(activeRequests, shutdownCh))
 	r.Use(middlewares.RateLimiter(s.cfg.RateLimit, s.log))
+	r.Use(decryptor.Middleware)
 	r.Use(compressor.Compress(compressorService, s.log))
 
 	if signerService != nil {

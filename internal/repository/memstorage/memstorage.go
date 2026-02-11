@@ -4,11 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
 	"os"
 	"sync"
 	"time"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/model"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/service"
 	"go.uber.org/zap"

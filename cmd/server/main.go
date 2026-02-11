@@ -3,12 +3,12 @@ package main
 import (
 	"context"
 	"fmt"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/logger"
 	"net/http"
 	"os"
 	"sync"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/logger"
 	"github.com/kazakovdmitriy/go-musthave-metrics/internal/server"
 	"go.uber.org/zap"
 )

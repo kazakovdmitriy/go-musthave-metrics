@@ -2,10 +2,10 @@ package memstorage
 
 import (
 	"context"
+	"github.com/kazakovdmitriy/go-musthave-metrics/internal/utils/config"
 	"sync"
 	"testing"
 
-	"github.com/kazakovdmitriy/go-musthave-metrics/internal/config"
 	"github.com/stretchr/testify/assert"
 	"go.uber.org/zap/zaptest"
 )
